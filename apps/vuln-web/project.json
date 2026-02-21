@@ -1,0 +1,57 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "vuln-web",
+  "projectType": "application",
+  "root": "apps/vuln-web",
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-web",
+        "command": "pnpm run test"
+      }
+    },
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-web",
+        "command": "pnpm run dev"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-web",
+        "command": "pnpm run build"
+      }
+    },
+    "build:bundle": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-web",
+        "command": "pnpm run build:bundle"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-web",
+        "command": "pnpm run lint"
+      }
+    },
+    "preview": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-web",
+        "command": "pnpm run preview"
+      }
+    },
+    "install": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-web",
+        "command": "pnpm install"
+      }
+    }
+  }
+}

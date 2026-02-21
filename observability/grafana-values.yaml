@@ -1,0 +1,155 @@
+# Grafana configuration for ts-waf-demo observability
+# Visualization and dashboarding for Loki logs
+
+# Admin credentials
+adminUser: admin
+adminPassword: admin  # Change this in production!
+
+# Persistence
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClassName: standard
+
+# Resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Service
+service:
+  type: ClusterIP
+  port: 80
+
+# Datasources - preconfigure Loki
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
+        isDefault: true
+        jsonData:
+          maxLines: 1000
+          derivedFields:
+            - datasourceUid: Loki
+              matcherRegex: "trace_id=(\\w+)"
+              name: TraceID
+              url: "$${__value.raw}"
+
+# Dashboard providers
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: 'ts-waf-demo'
+        orgId: 1
+        folder: 'Chimera WAF Demo'
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/ts-waf-demo
+
+# Dashboards
+dashboards:
+  ts-waf-demo:
+    ts-waf-demo-requests:
+      json: |
+        {
+          "dashboard": {
+            "title": "Chimera WAF Demo - Request Metrics",
+            "timezone": "browser",
+            "schemaVersion": 16,
+            "version": 1,
+            "refresh": "10s",
+            "panels": [
+              {
+                "id": 1,
+                "title": "Request Rate (req/s)",
+                "type": "graph",
+                "targets": [
+                  {
+                    "expr": "rate({app=\"ts-waf-demo\"} | json [5m])",
+                    "legendFormat": "Requests/sec",
+                    "refId": "A"
+                  }
+                ],
+                "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+              },
+              {
+                "id": 2,
+                "title": "Status Code Distribution",
+                "type": "piechart",
+                "targets": [
+                  {
+                    "expr": "sum by (status) (count_over_time({app=\"ts-waf-demo\"} | json [1h]))",
+                    "legendFormat": "{{status}}",
+                    "refId": "A"
+                  }
+                ],
+                "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+              },
+              {
+                "id": 3,
+                "title": "Top Endpoints",
+                "type": "table",
+                "targets": [
+                  {
+                    "expr": "topk(10, sum by (path) (count_over_time({app=\"ts-waf-demo\"} | json [1h])))",
+                    "refId": "A"
+                  }
+                ],
+                "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+              },
+              {
+                "id": 4,
+                "title": "Request Latency (p95)",
+                "type": "graph",
+                "targets": [
+                  {
+                    "expr": "quantile_over_time(0.95, {app=\"ts-waf-demo\"} | json | unwrap latency_ms [5m])",
+                    "legendFormat": "p95 latency",
+                    "refId": "A"
+                  }
+                ],
+                "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+              },
+              {
+                "id": 5,
+                "title": "Recent Logs",
+                "type": "logs",
+                "targets": [
+                  {
+                    "expr": "{app=\"ts-waf-demo\"}",
+                    "refId": "A"
+                  }
+                ],
+                "gridPos": {"h": 10, "w": 24, "x": 0, "y": 16}
+              }
+            ]
+          }
+        }
+
+# Security
+securityContext:
+  runAsUser: 472
+  runAsGroup: 472
+  fsGroup: 472
+
+# Enable plugins
+plugins:
+  - grafana-piechart-panel
+
+# Environment variables
+env:
+  GF_SECURITY_ADMIN_USER: admin
+  GF_SECURITY_ADMIN_PASSWORD: admin
+  GF_USERS_ALLOW_SIGN_UP: false
+  GF_SERVER_ROOT_URL: http://localhost:3000

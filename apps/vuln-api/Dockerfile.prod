@@ -1,0 +1,67 @@
+# Production Dockerfile for  WAF Demo API
+# Multi-stage build for minimal attack surface
+FROM python:3.12-slim AS builder
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy dependency files and install dependencies
+COPY pyproject.toml uv.lock /app/
+RUN uv sync --frozen --no-dev
+
+# Final stage - minimal runtime
+FROM python:3.12-slim
+
+# Install uv in runtime stage
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Security: Run as non-root user
+RUN groupadd -r -g 1000 demowaf && \
+    useradd -r -u 1000 -g demowaf -m -s /sbin/nologin demowaf
+
+# Copy virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/pyproject.toml /app/pyproject.toml
+COPY --from=builder /app/uv.lock /app/uv.lock
+
+# Set environment variables
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8880 \
+    DEMO_MODE=strict \
+    LOG_LEVEL=info
+
+# Set working directory
+WORKDIR /app
+
+# Copy application code
+COPY --chown=demowaf:demowaf wsgi.py /app/wsgi.py
+COPY --chown=demowaf:demowaf app.py /app/app.py
+COPY --chown=demowaf:demowaf app/ /app/app/
+COPY --chown=demowaf:demowaf static /app/static
+COPY --chown=demowaf:demowaf gunicorn.conf.py /app/
+
+# Security: Set read-only filesystem (app needs no write access)
+# Application state is in-memory only
+RUN chown -R demowaf:demowaf /app
+
+# Switch to non-root user
+USER demowaf
+
+# Expose application port
+EXPOSE 8880
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8880/healthz')" || exit 1
+
+# Run Gunicorn with gevent workers
+CMD ["uv", "run", "gunicorn", "-c", "gunicorn.conf.py", "wsgi:app"]

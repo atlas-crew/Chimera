@@ -1,0 +1,63 @@
+/*  Protected Demo Site Styles */
+
+body {
+    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: 50px auto;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.container {
+    background: rgba(255,255,255,0.1);
+    padding: 30px;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+}
+
+h1 {
+    color: #fff;
+    text-align: center;
+}
+
+.status {
+    background: rgba(0,255,0,0.2);
+    padding: 10px;
+    border-radius: 5px;
+    margin: 20px 0;
+}
+
+.warning {
+    background: rgba(255,165,0,0.3);
+    padding: 15px;
+    border-radius: 5px;
+    margin: 20px 0;
+    border-left: 4px solid #ffa500;
+}
+
+.demo-links {
+    margin: 20px 0;
+}
+
+.demo-links a {
+    display: inline-block;
+    margin: 5px;
+    padding: 10px 15px;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+}
+
+.architecture-block {
+    background: rgba(0,0,0,0.2);
+    padding: 15px;
+    border-radius: 5px;
+}
+
+footer.site-footer {
+    text-align: center;
+    margin-top: 40px;
+    opacity: 0.8;
+}

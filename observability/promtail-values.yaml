@@ -1,0 +1,111 @@
+# Promtail configuration for ts-waf-demo
+# Scrapes container logs and ships to Loki with JSON parsing
+
+config:
+  # Loki server URL
+  clients:
+    - url: http://loki:3100/loki/api/v1/push
+      tenant_id: ts-waf-demo
+
+  # Scrape configuration
+  snippets:
+    scrapeConfigs: |
+      # Pod logs from Kubernetes
+      - job_name: kubernetes-pods
+        pipeline_stages:
+          - cri: {}
+          - match:
+              selector: '{app="ts-waf-demo"}'
+              stages:
+                # Parse JSON logs from Gunicorn
+                - json:
+                    expressions:
+                      ts: ts
+                      level: level
+                      logger: logger
+                      method: method
+                      path: path
+                      status: status
+                      latency_ms: latency_ms
+                      user_agent: user_agent
+                      message: message
+                # Extract labels from JSON fields
+                - labels:
+                    method:
+                    status:
+                    logger:
+                # Add timestamp from log entry
+                - timestamp:
+                    source: ts
+                    format: RFC3339Nano
+                # Format output line
+                - output:
+                    source: message
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          # Only scrape pods in the echo namespace
+          - source_labels:
+              - __meta_kubernetes_namespace
+            action: keep
+            regex: echo
+          # Only scrape ts-waf-demo pods
+          - source_labels:
+              - __meta_kubernetes_pod_label_app
+            action: keep
+            regex: ts-waf-demo
+          # Add namespace label
+          - source_labels:
+              - __meta_kubernetes_namespace
+            target_label: namespace
+          # Add pod name label
+          - source_labels:
+              - __meta_kubernetes_pod_name
+            target_label: pod
+          # Add container name label
+          - source_labels:
+              - __meta_kubernetes_pod_container_name
+            target_label: container
+          # Add app label
+          - source_labels:
+              - __meta_kubernetes_pod_label_app
+            target_label: app
+          # Set log path
+          - source_labels:
+              - __meta_kubernetes_pod_uid
+              - __meta_kubernetes_pod_container_name
+            target_label: __path__
+            separator: /
+            replacement: /var/log/pods/*$1/*.log
+
+# DaemonSet configuration (runs on every node)
+daemonset:
+  enabled: true
+
+# Resources
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Security context
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+  fsGroup: 0
+
+# Service account
+serviceAccount:
+  create: true
+
+# Tolerations to run on all nodes
+tolerations:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/master
+    operator: Exists
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+    operator: Exists

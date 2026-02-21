@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100" height="100" rx="6" fill="#519DEC"/>
+  <rect x="7" y="7" width="86" height="86" rx="4" fill="#0256B6"/>
+  
+  <!-- Ship hull -->
+  <path d="M20 65 Q25 75 50 75 Q75 75 80 65 L75 55 L25 55 Z" fill="#D62598"/>
+  <path d="M25 60 Q30 68 50 68 Q70 68 75 60 L72 55 L28 55 Z" fill="white"/>
+  
+  <!-- Main mast -->
+  <rect x="48" y="25" width="4" height="35" fill="white"/>
+  
+  <!-- Sail -->
+  <path d="M30 28 Q50 22 50 45 L50 28 Z" fill="white"/>
+  <path d="M70 28 Q50 22 50 45 L50 28 Z" fill="white"/>
+  
+  <!-- Cross beam -->
+  <rect x="30" y="28" width="40" height="3" fill="#D62598"/>
+  
+  <!-- Flag -->
+  <path d="M50 25 L50 18 L62 21.5 L50 25" fill="#D62598"/>
+  
+  <!-- Cargo/treasure suggestion -->
+  <rect x="38" y="58" width="8" height="6" fill="#D62598" opacity="0.7"/>
+  <rect x="48" y="58" width="8" height="6" fill="#D62598" opacity="0.7"/>
+</svg>

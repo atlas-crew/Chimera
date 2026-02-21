@@ -1,0 +1,5 @@
+{
+  "baseHttp": "http://echo.localtest.me",
+  "baseHttps": "https://echo.localtest.me",
+  "insecureSkipTLSVerify": true
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "chimera-api",
+  "projectType": "application",
+  "root": "apps/vuln-api",
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-api",
+        "command": "make test-ci"
+      }
+    },
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-api",
+        "command": "make start"
+      }
+    },
+    "stop": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-api",
+        "command": "make stop"
+      }
+    },
+    "serve-api-demo": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-api",
+        "command": "node scripts/run-compose.mjs up api-demo"
+      }
+    },
+    "stop-api-demo": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-api",
+        "command": "node scripts/run-compose.mjs down api-demo"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["vuln-web:build:bundle"],
+      "options": {
+        "cwd": "apps/vuln-api",
+        "command": "uv build"
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "options": {
+        "cwd": "apps/vuln-api",
+        "command": "uv publish"
+      }
+    }
+  }
+}
