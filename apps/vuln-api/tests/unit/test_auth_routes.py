@@ -13,6 +13,7 @@ Tests cover:
 import pytest
 import json
 import hashlib
+import os
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -283,9 +284,12 @@ class TestPasswordReset:
         data = response.get_json()
         assert data['success'] is True
 
-        # Verify password was changed
+        # Verify password was changed (hash algorithm depends on DEMO_MODE)
         user = users_db[sample_user['user_id']]
-        expected_hash = hashlib.sha256(new_password.encode()).hexdigest()
+        if os.getenv('DEMO_MODE', 'strict').lower() == 'strict':
+            expected_hash = hashlib.sha256(new_password.encode()).hexdigest()
+        else:
+            expected_hash = hashlib.md5(new_password.encode()).hexdigest()
         assert user['password_hash'] == expected_hash
 
     def test_reset_password_invalid_token(self, client):

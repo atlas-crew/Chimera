@@ -512,16 +512,24 @@ def generate_attack_patterns():
 # Auth-Specific Test Fixtures
 # ============================================================================
 
+def _hash_password(password):
+    """Hash password matching the route's weak_hash_password logic."""
+    import hashlib
+    import os
+    if os.getenv('DEMO_MODE', 'strict').lower() == 'strict':
+        return hashlib.sha256(password.encode()).hexdigest()
+    return hashlib.md5(password.encode()).hexdigest()
+
+
 @pytest.fixture
 def sample_user():
     """Create a sample user for authentication tests."""
-    import hashlib
     import uuid
     from datetime import datetime
 
     user_id = str(uuid.uuid4())
     password = "SecurePassword123!"
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    password_hash = _hash_password(password)
 
     user_data = {
         'user_id': user_id,
@@ -550,14 +558,13 @@ def sample_user():
 @pytest.fixture
 def mfa_user():
     """Create a user with MFA enabled."""
-    import hashlib
     import uuid
     import secrets
     from datetime import datetime
 
     user_id = str(uuid.uuid4())
     password = "SecurePassword123!"
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    password_hash = _hash_password(password)
     totp_secret = secrets.token_hex(16)
 
     user_data = {

@@ -1,9 +1,13 @@
-# Chimera
+<p align="center">
+  <img src="docs/assets/chimera-banner.png" alt="Chimera" />
+</p>
 
-[![PyPI](https://img.shields.io/pypi/v/chimera-api)](https://pypi.org/project/chimera-api/)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![OWASP Top 10](https://img.shields.io/badge/OWASP_Top_10-100%25-red)](docs/vulnerability-inventory.md)
+<p align="center">
+  <a href="https://pypi.org/project/chimera-api/"><img src="https://img.shields.io/pypi/v/chimera-api" alt="PyPI" /></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12%2B-blue" alt="Python 3.12+" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT" /></a>
+  <a href="docs/vulnerability-inventory.md"><img src="https://img.shields.io/badge/OWASP_Top_10-100%25-red" alt="OWASP Top 10" /></a>
+</p>
 
 An intentionally vulnerable monorepo for WAF testing and security education. Chimera bundles a Flask API with **456+ vulnerable endpoints** across **25+ industry domains** and a React portal frontend into a single installable package.
 
