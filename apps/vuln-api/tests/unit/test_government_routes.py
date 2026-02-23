@@ -10,7 +10,7 @@ def test_get_case_details(client):
 
 
 def test_benefits_search_sql_injection(client):
-    response = client.get("/api/v1/gov/benefits/search?q=' OR '1'='1")
+    response = client.get("/api/v1/gov/benefits/search?q=' UNION SELECT * --")
     assert response.status_code == 200
     data = response.get_json()
     assert data['vulnerability'] == 'SQL_INJECTION_DETECTED'

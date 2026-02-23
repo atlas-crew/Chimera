@@ -560,8 +560,9 @@ class TestStoreSingletonPattern:
         """Test get_all_store_stats returns statistics."""
         reset_all_stores()
 
-        users_store = get_store('users')
-        products_store = get_store('products', store_class=TransactionalDataStore)
+        # Use unique names to avoid collisions with stores registered by app init
+        users_store = get_store('test_stats_users')
+        products_store = get_store('test_stats_products', store_class=TransactionalDataStore)
 
         users_store.create('user_1', {'name': 'Alice'})
         products_store.create('prod_1', {'name': 'Widget'})
@@ -569,10 +570,10 @@ class TestStoreSingletonPattern:
 
         stats = get_all_store_stats()
 
-        assert stats['users']['count'] == 1
-        assert stats['users']['type'] == 'DataStore'
-        assert stats['products']['count'] == 2
-        assert stats['products']['type'] == 'TransactionalDataStore'
+        assert stats['test_stats_users']['count'] == 1
+        assert stats['test_stats_users']['type'] == 'DataStore'
+        assert stats['test_stats_products']['count'] == 2
+        assert stats['test_stats_products']['type'] == 'TransactionalDataStore'
 
 
 class TestDataStoreEdgeCases:

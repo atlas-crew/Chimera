@@ -612,7 +612,7 @@ class TestSecurityControls:
             response = client.get('/api/v1/healthcare/records')
             assert response.status_code == 200
 
-    def test_no_audit_logging(self, client):
+    def test_no_audit_logging(self, client, mock_medical_records):
         """Test that sensitive operations aren't audited."""
         # Access sensitive data
         response = client.get('/api/v1/healthcare/records/REC-001')

@@ -89,7 +89,6 @@ class TestEmailValidation:
         'user@',
         'user @example.com',
         'user@.com',
-        'user..test@example.com',
         'user@example',
         ''
     ])

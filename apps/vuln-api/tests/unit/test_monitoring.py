@@ -79,36 +79,32 @@ class TestStructuredFormatter:
             assert 'exception' in log_data
             assert 'ValueError' in log_data['exception']
 
-    @patch('app.utils.monitoring.has_request_context')
-    @patch('app.utils.monitoring.request')
-    @patch('app.utils.monitoring.g')
-    def test_structured_formatter_with_request_context(
-        self, mock_g, mock_request, mock_has_context
-    ):
+    def test_structured_formatter_with_request_context(self, app):
         """Test structured formatter includes request context."""
-        mock_has_context.return_value = True
-        mock_request.method = 'GET'
-        mock_request.path = '/api/test'
-        mock_request.remote_addr = '127.0.0.1'
-        mock_g.request_id = 'req_123'
+        with app.test_request_context(
+            '/api/test', method='GET',
+            environ_base={'REMOTE_ADDR': '127.0.0.1'}
+        ):
+            from flask import g
+            g.request_id = 'req_123'
 
-        formatter = StructuredFormatter()
-        record = logging.LogRecord(
-            name='test',
-            level=logging.INFO,
-            pathname='test.py',
-            lineno=1,
-            msg='Test',
-            args=(),
-            exc_info=None
-        )
+            formatter = StructuredFormatter()
+            record = logging.LogRecord(
+                name='test',
+                level=logging.INFO,
+                pathname='test.py',
+                lineno=1,
+                msg='Test',
+                args=(),
+                exc_info=None
+            )
 
-        formatted = formatter.format(record)
-        log_data = json.loads(formatted)
+            formatted = formatter.format(record)
+            log_data = json.loads(formatted)
 
-        assert log_data['request']['method'] == 'GET'
-        assert log_data['request']['path'] == '/api/test'
-        assert log_data['request_id'] == 'req_123'
+            assert log_data['request']['method'] == 'GET'
+            assert log_data['request']['path'] == '/api/test'
+            assert log_data['request_id'] == 'req_123'
 
 
 class TestSetupLogging:
@@ -141,17 +137,12 @@ class TestLogRequestDecorator:
     """Test log_request decorator."""
 
     @patch('app.utils.monitoring.logger')
-    @patch('app.utils.monitoring.request')
-    def test_log_request_basic(self, mock_request, mock_logger, app):
+    def test_log_request_basic(self, mock_logger, app):
         """Test basic request logging."""
-        with app.app_context():
-            mock_request.method = 'GET'
-            mock_request.path = '/api/test'
-            mock_request.remote_addr = '127.0.0.1'
-            mock_request.user_agent = Mock()
-            mock_request.user_agent.string = 'pytest'
-            mock_request.data = b''
-
+        with app.test_request_context(
+            '/api/test', method='GET',
+            environ_base={'REMOTE_ADDR': '127.0.0.1'}
+        ):
             @log_request()
             def test_view():
                 return {'success': True}
@@ -162,18 +153,13 @@ class TestLogRequestDecorator:
             assert mock_logger.info.called
 
     @patch('app.utils.monitoring.logger')
-    @patch('app.utils.monitoring.request')
-    def test_log_request_with_headers(self, mock_request, mock_logger, app):
+    def test_log_request_with_headers(self, mock_logger, app):
         """Test request logging includes headers."""
-        with app.app_context():
-            mock_request.method = 'POST'
-            mock_request.path = '/api/test'
-            mock_request.remote_addr = '127.0.0.1'
-            mock_request.user_agent = Mock()
-            mock_request.user_agent.string = 'pytest'
-            mock_request.headers = {'Authorization': 'Bearer token'}
-            mock_request.data = b''
-
+        with app.test_request_context(
+            '/api/test', method='POST',
+            headers={'Authorization': 'Bearer token'},
+            environ_base={'REMOTE_ADDR': '127.0.0.1'}
+        ):
             @log_request(include_headers=True)
             def test_view():
                 return {'success': True}
@@ -185,16 +171,12 @@ class TestLogRequestDecorator:
             assert 'headers' in str(call_args)
 
     @patch('app.utils.monitoring.logger')
-    @patch('app.utils.monitoring.request')
-    def test_log_request_exception_handling(self, mock_request, mock_logger, app):
+    def test_log_request_exception_handling(self, mock_logger, app):
         """Test request logging handles exceptions."""
-        with app.app_context():
-            mock_request.method = 'GET'
-            mock_request.path = '/api/test'
-            mock_request.remote_addr = '127.0.0.1'
-            mock_request.user_agent = Mock()
-            mock_request.user_agent.string = 'pytest'
-
+        with app.test_request_context(
+            '/api/test', method='GET',
+            environ_base={'REMOTE_ADDR': '127.0.0.1'}
+        ):
             @log_request()
             def test_view():
                 raise ValueError('Test error')
@@ -469,37 +451,28 @@ class TestRequestIDMiddleware:
         assert len(app.before_request_funcs) > 0
         assert len(app.after_request_funcs) > 0
 
-    @patch('app.utils.monitoring.g')
-    @patch('app.utils.monitoring.request')
-    def test_request_id_middleware_generates_id(self, mock_request, mock_g, app):
+    def test_request_id_middleware_generates_id(self, app):
         """Test middleware generates request ID."""
-        mock_request.headers.get.return_value = None
-
         request_id_middleware(app)
 
         with app.test_request_context():
-            # Trigger before_request
+            from flask import g
             for func in app.before_request_funcs[None]:
                 func()
 
-            # Check that request_id was set on g
-            # Note: This test verifies the middleware registration
-            pass
+            assert hasattr(g, 'request_id')
+            assert len(g.request_id) > 20
 
-    @patch('app.utils.monitoring.g')
-    @patch('app.utils.monitoring.request')
-    def test_request_id_middleware_uses_existing_id(self, mock_request, mock_g, app):
+    def test_request_id_middleware_uses_existing_id(self, app):
         """Test middleware uses existing X-Request-ID header."""
-        mock_request.headers.get.return_value = 'existing_id_123'
-
         request_id_middleware(app)
 
-        with app.test_request_context():
+        with app.test_request_context(headers={'X-Request-ID': 'existing_id_123'}):
+            from flask import g
             for func in app.before_request_funcs[None]:
                 func()
 
-            # Would set g.request_id = 'existing_id_123'
-            pass
+            assert g.request_id == 'existing_id_123'
 
 
 class TestLogException:
