@@ -14,7 +14,6 @@ jobs:
   lint-frontend:
     name: Lint Frontend
     runs-on: ubuntu-latest
-    continue-on-error: true # eslint deps missing from devDependencies
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
