@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "chimera-api"
-version = "0.1.0"
+version = "0.1.1"
 description = "Flask demo API application for resilience testing"
 license = "MIT"
 requires-python = ">=3.12"
