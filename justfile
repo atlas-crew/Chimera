@@ -40,27 +40,27 @@ projects:
 reset:
     pnpm nx reset
 
-# ── vuln-api ──────────────────────────────────────────
+# ── chimera-api ───────────────────────────────────────
 
 # Start the API (vulnerable mode)
 api-start:
-    pnpm nx run vuln-api:start
+    pnpm nx run chimera-api:start
 
-# Stop the API
+# Show how to stop the API process
 api-stop:
-    pnpm nx run vuln-api:stop
+    pnpm nx run chimera-api:stop
 
 # Run API tests
 api-test:
-    pnpm nx run vuln-api:test
+    pnpm nx run chimera-api:test
 
 # Start the API demo via docker-compose
 api-demo-up:
-    pnpm nx run vuln-api:serve-api-demo
+    pnpm nx run chimera-api:serve-api-demo
 
 # Stop the API demo
 api-demo-down:
-    pnpm nx run vuln-api:stop-api-demo
+    pnpm nx run chimera-api:stop-api-demo
 
 # Run API unit tests directly (bypasses Nx)
 api-test-unit:
@@ -111,6 +111,6 @@ bundle: build-api
 dev:
     pnpm nx run-many -t start --parallel=2
 
-# Run a specific Nx target for a project (e.g. just run vuln-api test)
+# Run a specific Nx target for a project (e.g. just run chimera-api test)
 run project target:
     pnpm nx run {{ project }}:{{ target }}

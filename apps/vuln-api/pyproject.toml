@@ -5,6 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "chimera-api"
 version = "0.1.1"
+authors = [
+{name = "Nicholas Ferguson", email = "nick@atlascrew.dev"}
+]
+maintainers = [
+{name = "Nicholas Ferguson", email = "nick@atlascrew.dev"}
+]
+readme = "README.md"
+keywords = [ "security", "vulernable-api", "vulnerable-app", "cybersecurity", "offensive-security", "security-testing", "security-education", "Flask"]
 description = "Flask demo API application for resilience testing"
 license = "MIT"
 requires-python = ">=3.12"
@@ -27,6 +35,12 @@ dev = [
 
 [project.scripts]
 chimera-api = "app.cli:main"
+
+[project.urls]
+Homepage = "https://nickcrew.github.io/Chimera"
+Repositroy = "https://github.com/NickCrew/Chimera"
+Issues = "https://github.com/NickCrew/Chimera/Issues"
+Documentation = "https://nickcrew.github.io/Chimera"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

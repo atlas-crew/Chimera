@@ -15,14 +15,14 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/vuln-api",
-        "command": "make start"
+        "command": "PORT=8880 make run"
       }
     },
     "stop": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/vuln-api",
-        "command": "make stop"
+        "command": "printf 'chimera-api:start runs in the foreground; stop it with Ctrl+C or terminate the process externally.\\n'"
       }
     },
     "serve-api-demo": {

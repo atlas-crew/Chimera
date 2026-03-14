@@ -117,16 +117,18 @@ run: run-vulnerable
 run-vulnerable:
 	@echo "$(RED)⚠️  Starting in VULNERABLE mode (DEMO_MODE=full)$(NC)"
 	@echo "$(YELLOW)This mode has intentional security vulnerabilities for testing!$(NC)"
+	@# Use module execution so uv can resolve gunicorn reliably from the project env.
 	@export DEMO_MODE=full && \
 	export FLASK_ENV=development && \
-	$(UV) run gunicorn 'app:create_app()' --config gunicorn.conf.py
+	$(UV) run python -m gunicorn 'app:create_app()' --config gunicorn.conf.py
 
 # Run application in secure mode
 run-secure:
 	@echo "$(GREEN)Starting in SECURE mode (DEMO_MODE=strict)$(NC)"
+	@# Use module execution so uv can resolve gunicorn reliably from the project env.
 	@export DEMO_MODE=strict && \
 	export FLASK_ENV=production && \
-	$(UV) run gunicorn 'app:create_app()' --config gunicorn.conf.py
+	$(UV) run python -m gunicorn 'app:create_app()' --config gunicorn.conf.py
 
 # Run code linters
 lint:
