@@ -14,9 +14,10 @@ from app.models import *
 from app.utils import DEMO_PAGE_TEMPLATE
 
 @main_bp.route('/healthz')
+@main_bp.route('/api/v1/healthz')
 def healthz():
     """
-    Health check endpoint for Docker healthcheck
+    Health check endpoint for Docker healthcheck and frontend connectivity
     ---
     tags:
       - System

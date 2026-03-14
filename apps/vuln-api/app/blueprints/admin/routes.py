@@ -16,6 +16,28 @@ import base64
 
 from . import admin_bp
 from app.models import *
+from app.utils.security_config import security_config
+
+
+# ============================================================================
+# SECURITY CONFIGURATION - Educational Defensive Layers
+# ============================================================================
+
+@admin_bp.route('/api/v1/admin/security-config', methods=['GET'])
+def get_security_config():
+    """Get the current state of global security protections"""
+    return jsonify(security_config.to_dict())
+
+
+@admin_bp.route('/api/v1/admin/security-config', methods=['POST'])
+def update_security_config():
+    """Update the state of global security protections"""
+    data = request.get_json() or {}
+    security_config.update(data)
+    return jsonify({
+        "status": "updated",
+        "config": security_config.to_dict()
+    })
 
 
 # ============================================================================

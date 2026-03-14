@@ -16,6 +16,7 @@ import base64
 
 from . import healthcare_bp
 from app.models import *
+from app.utils.security_config import security_config
 
 
 # ============================================================================
@@ -143,7 +144,40 @@ def search_records():
     ssn = request.args.get('ssn', '')
     diagnosis = request.args.get('diagnosis', '')
 
-    # Simulated SQL injection vulnerability
+    # Check for global security override
+    if security_config.sqli_active:
+        # SECURE: Using simulated parameterized query behavior
+        sql_query = "SELECT * FROM medical_records WHERE (patient_name LIKE ? OR diagnosis LIKE ?) AND (patient_name LIKE ? AND ssn LIKE ? AND diagnosis LIKE ?)"
+        
+        results = []
+        for record_id, record in medical_records_db.items():
+            # Check if any part matches q OR if specific filters match
+            q_match = not search_query or (search_query.lower() in record.get('patient_name', '').lower() or
+                                          search_query.lower() in record.get('diagnosis', '').lower())
+            
+            name_match = not patient_name or (patient_name.lower() in record.get('patient_name', '').lower())
+            ssn_match = not ssn or (ssn in record.get('ssn', ''))
+            diag_match = not diagnosis or (diagnosis.lower() in record.get('diagnosis', '').lower())
+
+            if q_match and name_match and ssn_match and diag_match:
+                results.append({
+                    'record_id': record_id,
+                    'patient_name': record.get('patient_name'),
+                    'ssn': record.get('ssn'),
+                    'dob': record.get('dob'),
+                    'diagnosis': record.get('diagnosis')
+                })
+        
+        resp = jsonify({
+            'results': results,
+            'count': len(results),
+            'sql_query': sql_query,
+            'protection_active': True
+        })
+        resp.headers['X-Chimera-Defense'] = 'Parameterized-Queries'
+        return resp
+
+    # Simulated SQL injection vulnerability (PROTECTION OFF)
     if search_query:
         # Intentionally vulnerable: Direct string concatenation
         sql_query = f"SELECT * FROM medical_records WHERE patient_name LIKE '%{search_query}%' OR diagnosis LIKE '%{search_query}%'"
@@ -151,7 +185,7 @@ def search_records():
         # Simulate SQL injection detection
         if any(keyword in search_query.lower() for keyword in ['union', 'select', '--', ';', 'drop', 'delete']):
             # Simulate successful SQL injection
-            return jsonify({
+            resp = jsonify({
                 'vulnerability': 'SQL_INJECTION_DETECTED',
                 'query': sql_query,
                 'message': 'SQL injection successful',
@@ -161,6 +195,8 @@ def search_records():
                     'admin_credentials': {'username': 'db_admin', 'password_hash': 'md5_hash_here'}
                 }
             })
+            resp.headers['X-Chimera-Vulnerable'] = 'SQL-Injection'
+            return resp
 
     # Normal search (still vulnerable to enumeration)
     results = []
