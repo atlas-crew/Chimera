@@ -183,6 +183,7 @@ def create_app(config=None):
     from app.blueprints.genai import genai_bp
     from app.blueprints.diagnostics import diagnostics_bp
     from app.blueprints.recorder import recorder_bp
+    from app.blueprints.education import education_bp
     from app.middleware.traffic_recorder import TrafficRecorder
 
     # Initialize Traffic Recorder
@@ -215,6 +216,7 @@ def create_app(config=None):
     app.register_blueprint(genai_bp)
     app.register_blueprint(diagnostics_bp)
     app.register_blueprint(recorder_bp)
+    app.register_blueprint(education_bp)
 
     # Register database vulnerable endpoints (if database mode enabled)
     if use_database:
