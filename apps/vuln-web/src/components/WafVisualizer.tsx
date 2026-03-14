@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Shield, ShieldCheck, ShieldAlert, Cpu, Lock, Loader2, X } from 'lucide-react';
 import { useAttackLog } from '../hooks/useAttackLog';
+import { useCustomEvent } from '../hooks/useCustomEvent';
+import { CHIMERA_EVENTS } from '../lib/config';
 
 interface RequestStep {
   id: string;
   name: string;
-  status: 'pending' | 'passed' | 'failed';
+  status: 'pending' | 'passed' | 'failed' | 'neutralized';
   description: string;
   isBlockingStep?: boolean;
 }
@@ -21,7 +23,7 @@ interface ActiveRequest {
 const STEP_INITIAL_DELAY_MS = 400;
 const STEP_INTERVAL_MS = 600;
 
-export const WafVisualizer: React.FC = () => {
+export const WafVisualizer: React.FC<{ showLauncher?: boolean }> = ({ showLauncher = true }) => {
   const [activeRequest, setActiveRequest] = useState<ActiveRequest | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [userClosed, setUserClosed] = useState(false);
@@ -53,20 +55,49 @@ export const WafVisualizer: React.FC = () => {
     };
   }, []);
 
+  // Use the new generic hook for safer event handling
+  useCustomEvent(CHIMERA_EVENTS.TOGGLE_WAF_VISUALIZER, () => {
+    setIsOpen(prev => {
+      const next = !prev;
+      if (!next) setUserClosed(true);
+      else setUserClosed(false);
+      return next;
+    });
+  });
+
   useAttackLog((log) => {
     clearTimeouts(); // Reset if a new request comes in
+
+    const steps: RequestStep[] = [
+      { id: 'ip_rep', name: 'IP Reputation', status: 'pending', description: 'Checking source IP against known threat feeds...' },
+      { id: 'rate_limit', name: 'Rate Limiter', status: 'pending', description: 'Evaluating request frequency for burst patterns...' },
+      { id: 'waf_sig', name: 'WAF Signature', status: 'pending', description: 'Analyzing payload for malicious patterns (SQLi, XSS, RCE)...', isBlockingStep: true },
+    ];
+
+    // Add App Layer if we have origin defense data
+    if (log.origin_defense) {
+      steps.push({ 
+        id: 'origin_sec', 
+        name: 'App Layer (Origin)', 
+        status: 'pending', 
+        description: `Backend defense active: ${log.origin_defense}`,
+        isBlockingStep: true 
+      });
+    } else {
+      steps.push({ 
+        id: 'api_schema', 
+        name: 'API Schema', 
+        status: 'pending', 
+        description: 'Validating input structure against OAS definition...' 
+      });
+    }
 
     const newRequest: ActiveRequest = {
       id: log.id,
       type: log.type,
       payload: log.payload,
       finalStatus: log.status,
-      steps: [
-        { id: 'ip_rep', name: 'IP Reputation', status: 'pending', description: 'Checking source IP against known threat feeds...' },
-        { id: 'rate_limit', name: 'Rate Limiter', status: 'pending', description: 'Evaluating request frequency for burst patterns...' },
-        { id: 'waf_sig', name: 'WAF Signature', status: 'pending', description: 'Analyzing payload for malicious patterns (SQLi, XSS, RCE)...', isBlockingStep: true },
-        { id: 'api_schema', name: 'API Schema', status: 'pending', description: 'Validating input structure against OAS definition...' }
-      ]
+      steps
     };
 
     setActiveRequest(newRequest);
@@ -86,17 +117,33 @@ export const WafVisualizer: React.FC = () => {
         const nextSteps = [...prev.steps];
         const step = nextSteps[currentStep];
         
-        let stepStatus: 'passed' | 'failed' = 'passed';
-        if (step.isBlockingStep && log.status === 'blocked') {
+        let stepStatus: 'passed' | 'failed' | 'neutralized' = 'passed';
+        
+        // Block at WAF if status is blocked and no origin defense was mentioned
+        if (step.id === 'waf_sig' && log.status === 'blocked' && !log.origin_defense) {
           stepStatus = 'failed';
+        }
+        
+        // Handle App Layer (Origin)
+        if (step.id === 'origin_sec') {
+          if (log.status === 'blocked') {
+            stepStatus = 'failed';
+          } else if (log.origin_defense) {
+            // It passed but was neutralized by the backend
+            stepStatus = 'neutralized';
+          }
         }
 
         nextSteps[currentStep] = { ...step, status: stepStatus };
         return { ...prev, steps: nextSteps };
       });
 
-      // If current step failed, stop
-      if (newRequest.steps[currentStep].isBlockingStep && log.status === 'blocked') return;
+      // Stop if current step failed
+      const stepObj = newRequest.steps[currentStep];
+      const isFailedAtWaf = stepObj.id === 'waf_sig' && log.status === 'blocked' && !log.origin_defense;
+      const isFailedAtOrigin = stepObj.id === 'origin_sec' && log.status === 'blocked';
+
+      if (isFailedAtWaf || isFailedAtOrigin) return;
 
       currentStep++;
       const tid = setTimeout(processNextStep, STEP_INTERVAL_MS);
@@ -107,7 +154,28 @@ export const WafVisualizer: React.FC = () => {
     timeoutsRef.current.push(tid);
   });
 
-  if (!isOpen) return null;
+  if (!isOpen && showLauncher) {
+    return (
+      <button
+        onClick={() => {
+          setIsOpen(true);
+          setUserClosed(false);
+        }}
+        aria-label="Open WAF Visualizer"
+        className="fixed bottom-6 left-48 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-all hover:scale-110 z-[90] group"
+        title="Open WAF Visualizer (Ctrl+Shift+B)"
+      >
+        <Shield className="w-5 h-5" />
+        <span className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+          WAF Visualizer
+        </span>
+      </button>
+    );
+  }
+
+  if (!isOpen) {
+    return null;
+  }
 
   const firstPendingIdx = activeRequest?.steps.findIndex(s => s.status === 'pending') ?? -1;
 
@@ -161,10 +229,12 @@ export const WafVisualizer: React.FC = () => {
                   <div className={`mt-1 w-10 h-10 rounded-full flex items-center justify-center shrink-0 border-4 border-slate-50 dark:border-slate-950 transition-all ${
                     step.status === 'passed' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' :
                     step.status === 'failed' ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' :
+                    step.status === 'neutralized' ? 'bg-yellow-500 text-slate-900 shadow-lg shadow-yellow-500/20' :
                     'bg-slate-200 dark:bg-slate-800 text-slate-400'
                   }`}>
                     {step.status === 'passed' ? <ShieldCheck className="w-5 h-5" /> :
                      step.status === 'failed' ? <ShieldAlert className="w-5 h-5" /> :
+                     step.status === 'neutralized' ? <Lock className="w-5 h-5" /> :
                      idx === firstPendingIdx ? <Loader2 className="w-5 h-5 animate-spin" /> :
                      <Cpu className="w-5 h-5" />}
                   </div>
@@ -172,9 +242,10 @@ export const WafVisualizer: React.FC = () => {
                     <h4 className={`text-xs font-bold ${
                       step.status === 'passed' ? 'text-emerald-600 dark:text-emerald-400' :
                       step.status === 'failed' ? 'text-red-600 dark:text-red-400' :
+                      step.status === 'neutralized' ? 'text-yellow-600 dark:text-yellow-400' :
                       'text-slate-500 dark:text-slate-400'
                     }`}>
-                      {step.name}
+                      {step.name} {step.status === 'neutralized' && '(Neutralized)'}
                     </h4>
                     <p className="text-[10px] text-slate-400 leading-tight mt-0.5">{step.description}</p>
                   </div>
@@ -183,19 +254,27 @@ export const WafVisualizer: React.FC = () => {
             </ol>
 
             {/* Result Banner */}
-            {activeRequest.steps.every(s => s.status !== 'pending') || activeRequest.steps.some(s => s.status === 'failed') ? (
+            {activeRequest.steps.every(s => s.status !== 'pending') || activeRequest.steps.some(s => s.status === 'failed' || s.status === 'neutralized') ? (
               <div className={`p-4 rounded-xl text-center border animate-in zoom-in-95 duration-500 ${
                 activeRequest.finalStatus === 'blocked' 
                   ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30 text-red-700 dark:text-red-400' 
+                  : activeRequest.steps.some(s => s.status === 'neutralized')
+                  ? 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-900/30 text-yellow-700 dark:text-yellow-400'
                   : 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-900/30 text-emerald-700 dark:text-emerald-400'
               }`}>
                 <div className="flex items-center justify-center gap-2 mb-1">
-                  {activeRequest.finalStatus === 'blocked' ? <Lock className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
-                  <span className="text-xs font-bold uppercase tracking-widest">Verdict: {activeRequest.finalStatus}</span>
+                  {activeRequest.finalStatus === 'blocked' ? <Lock className="w-4 h-4" /> : 
+                   activeRequest.steps.some(s => s.status === 'neutralized') ? <ShieldAlert className="w-4 h-4" /> :
+                   <ShieldCheck className="w-4 h-4" />}
+                  <span className="text-xs font-bold uppercase tracking-widest">
+                    Verdict: {activeRequest.steps.some(s => s.status === 'neutralized') ? 'NEUTRALIZED' : activeRequest.finalStatus}
+                  </span>
                 </div>
                 <p className="text-[10px] opacity-80">
                   {activeRequest.finalStatus === 'blocked' 
                     ? 'Threat detected. Request terminated at ingress.' 
+                    : activeRequest.steps.some(s => s.status === 'neutralized')
+                    ? 'Threat neutralized by origin defense. No data leaked.'
                     : 'No policy violations detected. Request passed to origin.'}
                 </p>
               </div>

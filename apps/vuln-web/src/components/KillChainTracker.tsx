@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Trophy, CheckCircle2, Circle, Target, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trophy, CheckCircle2, Circle, Target, ChevronDown } from 'lucide-react';
 import { KILL_CHAIN_OBJECTIVES } from '../lib/objectives';
 import { useAttackLog } from '../hooks/useAttackLog';
+import { useCustomEvent } from '../hooks/useCustomEvent';
+import { CHIMERA_EVENTS } from '../lib/config';
 
 const STORAGE_KEY = 'chimera-kill-chain';
 const TOAST_DURATION_MS = 5000;
 
-export const KillChainTracker: React.FC = () => {
+export const KillChainTracker: React.FC<{ showLauncher?: boolean }> = ({ showLauncher = true }) => {
   const [completedIds, setCompletedIds] = useState<string[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return [];
@@ -26,6 +28,14 @@ export const KillChainTracker: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(completedIds));
+    window.dispatchEvent(
+      new CustomEvent(CHIMERA_EVENTS.KILL_CHAIN_PROGRESS, {
+        detail: {
+          completed: completedIds.length,
+          total: KILL_CHAIN_OBJECTIVES.length,
+        },
+      }),
+    );
   }, [completedIds]);
 
   // Cleanup toast on unmount
@@ -34,6 +44,11 @@ export const KillChainTracker: React.FC = () => {
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     };
   }, []);
+
+  // Use the new generic hook for safer event handling
+  useCustomEvent(CHIMERA_EVENTS.TOGGLE_KILL_CHAIN, () => {
+    setIsOpen(prev => !prev);
+  });
 
   useAttackLog((log) => {
     KILL_CHAIN_OBJECTIVES.forEach(obj => {
@@ -63,14 +78,34 @@ export const KillChainTracker: React.FC = () => {
     }
   };
 
+  if (!isOpen && showLauncher) {
+    return (
+      <button
+        onClick={() => setIsOpen(true)}
+        aria-label="Open Kill Chain Tracker"
+        className="fixed bottom-6 left-6 p-3 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg transition-all hover:scale-110 z-[90] group"
+        title="Open Kill Chain Tracker"
+      >
+        <Target className="w-6 h-6" />
+        <span className="absolute left-full ml-3 top-1/2 -translate-y-1/2 bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+          Kill Chain
+        </span>
+      </button>
+    );
+  }
+
+  if (!isOpen) {
+    return null;
+  }
+
   return (
-    <div className="fixed top-20 left-6 z-[90] w-64 max-w-[calc(100vw-3rem)] md:max-w-xs pointer-events-none">
+    <div className="fixed left-4 top-28 z-[90] w-64 max-w-[calc(100vw-2rem)] md:max-w-xs pointer-events-none">
       {/* Toast for completion */}
       {lastCompleted && (
-        <div 
-          role="status" 
+        <div
+          role="status"
           aria-live="polite"
-          className="mb-4 p-4 bg-emerald-600 text-white rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-left-10 duration-500 pointer-events-auto"
+          className="mb-4 p-4 bg-emerald-600 text-white rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-right-10 duration-500 pointer-events-auto"
         >
           <Trophy className="w-6 h-6 shrink-0" />
           <div>
@@ -82,29 +117,31 @@ export const KillChainTracker: React.FC = () => {
 
       {/* Main Panel */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden pointer-events-auto transition-all">
-        <button 
-          onClick={() => setIsOpen(!isOpen)}
-          aria-expanded={isOpen}
-          aria-controls="kill-chain-panel"
-          className="w-full p-4 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+        <div
+          className="w-full p-4 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700"
         >
           <div className="flex items-center gap-2">
             <Target className="w-4 h-4 text-red-500" />
             <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">Kill Chain Status</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <span className="text-[10px] font-bold text-slate-400">{completedIds.length} / {KILL_CHAIN_OBJECTIVES.length}</span>
-            {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+            <button
+              onClick={() => setIsOpen(false)}
+              aria-label="Close Kill Chain Tracker"
+              className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
           </div>
-        </button>
+        </div>
 
-        {isOpen && (
-          <div 
-            id="kill-chain-panel"
-            role="region"
-            aria-label="Objectives List"
-            className="p-4 space-y-4 animate-in slide-in-from-top-2 duration-300"
-          >
+        <div
+          id="kill-chain-panel"
+          role="region"
+          aria-label="Objectives List"
+          className="p-4 space-y-4 animate-in slide-in-from-top-2 duration-300"
+        >
             <ul className="space-y-4">
               {KILL_CHAIN_OBJECTIVES.map((obj) => {
                 const isDone = completedIds.includes(obj.id);
@@ -138,8 +175,7 @@ export const KillChainTracker: React.FC = () => {
               Reset Progress
             </button>
           </div>
-        )}
+        </div>
       </div>
-    </div>
   );
 };

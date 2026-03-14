@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageSquare, X, Send, Bot, Minimize2, Paperclip, Globe } from 'lucide-react';
+import { API_BASE_URL } from '../lib/config';
+import { detectPotentialAttack, dispatchAttackLog } from '../lib/security';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -8,6 +10,7 @@ interface Message {
 
 export const AiAssistant: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: 'Hello! I am the Portal Support AI. How can I assist you today?' }
   ]);
@@ -25,22 +28,6 @@ export const AiAssistant: React.FC = () => {
     scrollToBottom();
   }, [messages, isOpen]);
 
-  const dispatchAttackLog = (type: string, path: string, payload: string, status: 'blocked' | 'allowed' = 'allowed') => {
-    const event = new CustomEvent('chimera:attack-log', {
-      detail: {
-        id: Math.random().toString(36).substring(2, 11),
-        timestamp: new Date().toLocaleTimeString(),
-        method: 'POST',
-        path,
-        payload,
-        type,
-        status,
-        source_ip: '10.0.0.5' // Simulated User IP
-      }
-    });
-    window.dispatchEvent(event);
-  };
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -48,13 +35,13 @@ export const AiAssistant: React.FC = () => {
     setLoading(true);
     setMessages(prev => [...prev, { role: 'user', content: `Uploading file: ${file.name}` }]);
 
-    dispatchAttackLog('FileUpload', '/api/v1/genai/knowledge/upload', `filename=${file.name}`);
+    dispatchAttackLog('FileUpload', `${API_BASE_URL}/api/v1/genai/knowledge/upload`, `filename=${file.name}`);
 
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/v1/genai/knowledge/upload', {
+      const res = await fetch(`${API_BASE_URL}/api/v1/genai/knowledge/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -66,7 +53,7 @@ export const AiAssistant: React.FC = () => {
       let responseText = `File uploaded successfully. Doc ID: ${data.doc_id}`;
       if (data.warning) {
         responseText += `\n\nWARNING: ${data.warning}`;
-        dispatchAttackLog('FileUpload', '/api/v1/genai/knowledge/upload', `filename=${file.name} [VULN TRIGGERED]`, 'allowed');
+        dispatchAttackLog('FileUpload', `${API_BASE_URL}/api/v1/genai/knowledge/upload`, `filename=${file.name} [VULN TRIGGERED]`, 'allowed');
       }
       if (data.vulnerability) {
         responseText += `\n\n[System Alert]: ${data.vulnerability}`;
@@ -85,10 +72,10 @@ export const AiAssistant: React.FC = () => {
     setLoading(true);
     setMessages(prev => [...prev, { role: 'user', content: `Browsing: ${url}` }]);
 
-    dispatchAttackLog('SSRF', '/api/v1/genai/agent/browse', `url=${url}`);
+    dispatchAttackLog('SSRF', `${API_BASE_URL}/api/v1/genai/agent/browse`, `url=${url}`);
 
     try {
-      const res = await fetch('/api/v1/genai/agent/browse', {
+      const res = await fetch(`${API_BASE_URL}/api/v1/genai/agent/browse`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
@@ -101,7 +88,7 @@ export const AiAssistant: React.FC = () => {
       let responseText = data.content || data.summary || 'Content retrieved.';
       if (data.vulnerability) {
         responseText += `\n\n[System Alert]: ${data.vulnerability}`;
-        dispatchAttackLog('SSRF', '/api/v1/genai/agent/browse', `url=${url} [VULN TRIGGERED]`, 'allowed');
+        dispatchAttackLog('SSRF', `${API_BASE_URL}/api/v1/genai/agent/browse`, `url=${url} [VULN TRIGGERED]`, 'allowed');
       }
 
       setMessages(prev => [...prev, { role: 'assistant', content: responseText }]);
@@ -128,18 +115,28 @@ export const AiAssistant: React.FC = () => {
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
     setLoading(true);
 
-    // Detect potential injection attempts for logging
-    const isPotentialAttack = userMsg.includes('ignore') || userMsg.includes('system') || userMsg.includes('sql');
-    dispatchAttackLog('GenAI', '/api/v1/genai/chat', userMsg, isPotentialAttack ? 'blocked' : 'allowed');
+    // Detect potential injection attempts for logging using the new security utility
+    const isPotentialAttack = detectPotentialAttack(userMsg);
+    dispatchAttackLog('GenAI', `${API_BASE_URL}/api/v1/genai/chat`, userMsg, isPotentialAttack ? 'blocked' : 'allowed');
 
     try {
-      const res = await fetch('/api/v1/genai/chat', {
+      const res = await fetch(`${API_BASE_URL}/api/v1/genai/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMsg })
       });
       const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.response }]);
+      
+      let responseText = data.response;
+      if (data.warning) {
+        responseText += `\n\n[Security Warning]: ${data.warning}`;
+      }
+      if (data.vulnerability) {
+        responseText += `\n\n[Vulnerability Detected]: ${data.vulnerability}`;
+        dispatchAttackLog('GenAI', `${API_BASE_URL}/api/v1/genai/chat`, userMsg + ' [VULN TRIGGERED]', 'allowed');
+      }
+
+      setMessages(prev => [...prev, { role: 'assistant', content: responseText }]);
     } catch (err) {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I am having trouble connecting to the mainframe.' }]);
     } finally {
@@ -147,12 +144,15 @@ export const AiAssistant: React.FC = () => {
     }
   };
 
-  if (!isOpen) {
+  if (!isOpen || isMinimized) {
     return (
-      <button 
-        onClick={() => setIsOpen(true)}
+      <button
+        onClick={() => {
+          setIsOpen(true);
+          setIsMinimized(false);
+        }}
         aria-label="Open AI Support Chat"
-        className="fixed bottom-6 right-6 p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-all hover:scale-110 z-50 group"
+        className="fixed bottom-6 right-6 p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg transition-all hover:scale-110 z-50 group"
       >
         <MessageSquare className="w-6 h-6" />
         <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
@@ -171,7 +171,7 @@ export const AiAssistant: React.FC = () => {
             <Bot className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="font-bold text-sm">Portal Assistant</h3>
+            <h3 className="font-bold text-sm text-white">Portal Assistant</h3>
             <p className="text-[10px] text-blue-200 flex items-center gap-1">
               <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
               Online
@@ -179,7 +179,7 @@ export const AiAssistant: React.FC = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setIsOpen(false)} aria-label="Minimize Chat" className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors">
+          <button onClick={() => setIsMinimized(true)} aria-label="Minimize Chat" className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors">
             <Minimize2 className="w-4 h-4" />
           </button>
           <button onClick={() => setIsOpen(false)} aria-label="Close Chat" className="p-1 hover:bg-red-500/20 rounded text-slate-400 hover:text-red-400 transition-colors">

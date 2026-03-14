@@ -19,7 +19,7 @@ export const TourGuide: React.FC = () => {
       content: (
         <div>
           <h3 className="font-bold text-lg mb-2">Welcome to the Vulnerable Portal</h3>
-          <p>This application is designed to demonstrate real-world security vulnerabilities. Let's take a quick tour of a SQL Injection exploit.</p>
+          <p>This application is designed to demonstrate real-world security vulnerabilities. Let's take a quick tour of common exploits.</p>
         </div>
       ),
       placement: 'center',
@@ -35,19 +35,57 @@ export const TourGuide: React.FC = () => {
       target: '#healthcare-search-input',
       content: (
         <div>
-          <h3 className="font-bold text-sm mb-2">The Vulnerable Target</h3>
+          <h3 className="font-bold text-sm mb-2">Healthcare: SQL Injection</h3>
           <p className="mb-2">This search bar is vulnerable. Try entering this payload:</p>
           <code className="block bg-slate-100 dark:bg-slate-800 p-2 rounded text-xs font-mono text-red-600 mb-2">
             ' OR 1=1 --
           </code>
-          <p>This payload injects a tautology (1=1) into the SQL query, forcing the database to return all records instead of filtering them.</p>
+          <p>This forces the database to return all records instead of filtering them.</p>
         </div>
       ),
       placement: 'bottom',
     },
     {
-      target: '.red-team-console-hint', // We need to add this class to the footer hint
-      content: 'Keep an eye on the Red Team Console (Ctrl + ~) to see the attack log in real-time as you execute exploits.',
+      target: 'a[href="/banking"]',
+      content: 'Next, let\'s look at the Banking Dashboard for Business Logic flaws.',
+      spotlightClicks: true,
+    },
+    {
+      target: '#transfer-amount-input',
+      content: (
+        <div>
+          <h3 className="font-bold text-sm mb-2">Banking: Logic Manipulation</h3>
+          <p className="mb-2">The transfer logic doesn't properly validate the amount. Try entering a negative value:</p>
+          <code className="block bg-slate-100 dark:bg-slate-800 p-2 rounded text-xs font-mono text-red-600 mb-2">
+            -1000
+          </code>
+          <p>Transferring a negative amount can actually increase your balance by subtracting a negative number from your account!</p>
+        </div>
+      ),
+      placement: 'bottom',
+    },
+    {
+      target: 'a[href="/ecommerce"]',
+      content: 'Finally, visit the E-commerce Portal to see Reflected XSS.',
+      spotlightClicks: true,
+    },
+    {
+      target: '#ecommerce-search-input',
+      content: (
+        <div>
+          <h3 className="font-bold text-sm mb-2">Ecommerce: Reflected XSS</h3>
+          <p className="mb-2">The search result page reflects your input without sanitization. Try this script:</p>
+          <code className="block bg-slate-100 dark:bg-slate-800 p-2 rounded text-xs font-mono text-red-600 mb-2">
+            &lt;script&gt;alert('XSS')&lt;/script&gt;
+          </code>
+          <p>Your browser will execute this JavaScript, proving that an attacker could run arbitrary code in a victim's session.</p>
+        </div>
+      ),
+      placement: 'bottom',
+    },
+    {
+      target: '.red-team-console-hint',
+      content: 'Keep an eye on the Red Team Console (Ctrl + ~) to see the attack log in real-time as you execute these exploits.',
       placement: 'top',
     }
   ];
@@ -58,17 +96,18 @@ export const TourGuide: React.FC = () => {
     if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
       setRun(false);
       setStepIndex(0);
-    } else if (type === EVENTS.STEP_AFTER && index === 1) {
-      // Automatically navigate to healthcare if the user clicks next on the link step
-      if (location.pathname !== '/healthcare') {
-        navigate('/healthcare');
-        // Give time for navigation
+    } else if (type === EVENTS.STEP_AFTER && (index === 1 || index === 3 || index === 5)) {
+      // Automatically navigate to the correct dashboard
+      const dashboard = index === 1 ? '/healthcare' : index === 3 ? '/banking' : '/ecommerce';
+      const nextStep = index === 1 ? 2 : index === 3 ? 4 : 6;
+
+      if (location.pathname !== dashboard) {
+        navigate(dashboard);
         setTimeout(() => {
-            setStepIndex(2);
+            setStepIndex(nextStep);
         }, 500);
       }
     } else if (type === EVENTS.STEP_AFTER || type === EVENTS.TARGET_NOT_FOUND) {
-        // Update state to advance the tour
         setStepIndex(index + (action === 'prev' ? -1 : 1));
     }
   };

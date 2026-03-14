@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Terminal, X, Shield, Activity } from 'lucide-react';
+import { useCustomEvent } from '../hooks/useCustomEvent';
+import { CHIMERA_EVENTS } from '../lib/config';
 
 interface AttackLog {
   id: string;
@@ -12,7 +14,7 @@ interface AttackLog {
   source_ip: string;
 }
 
-export const RedTeamConsole: React.FC = () => {
+export const RedTeamConsole: React.FC<{ showLauncher?: boolean }> = ({ showLauncher = true }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [logs, setLogs] = useState<AttackLog[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -28,18 +30,18 @@ export const RedTeamConsole: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Listen for real attack logs from other components
-  useEffect(() => {
-    const handleAttackLog = (e: CustomEvent<AttackLog>) => {
-      setLogs(prev => [...prev.slice(-49), e.detail]); // Keep last 50 logs
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      }
-    };
+  // Use the new generic hook for safer event handling
+  useCustomEvent(CHIMERA_EVENTS.TOGGLE_RED_TEAM_CONSOLE, () => {
+    setIsOpen(prev => !prev);
+  });
 
-    window.addEventListener('chimera:attack-log', handleAttackLog as unknown as EventListener);
-    return () => window.removeEventListener('chimera:attack-log', handleAttackLog as unknown as EventListener);
-  }, []);
+  // Listen for real attack logs from other components using the generic hook
+  useCustomEvent<AttackLog>(CHIMERA_EVENTS.ATTACK_LOG, (log) => {
+    setLogs(prev => [...prev.slice(-49), log]); // Keep last 50 logs
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  });
 
   // Simulate receiving background attack traffic
   useEffect(() => {
@@ -89,7 +91,24 @@ export const RedTeamConsole: React.FC = () => {
     genai: logs.filter(l => l.type === 'GenAI').length,
   }), [logs]);
 
-  if (!isOpen) return null;
+  if (!isOpen && showLauncher) {
+    return (
+      <button
+        onClick={() => setIsOpen(true)}
+        aria-label="Open Red Team Console"
+        className="fixed bottom-6 left-[8.5rem] p-3 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg transition-all hover:scale-110 z-[90] group"
+      >
+        <Terminal className="w-6 h-6" />
+        <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-slate-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+          Red Team Console
+        </span>
+      </button>
+    );
+  }
+
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <div className="fixed top-0 left-0 w-full h-64 bg-slate-950 text-green-400 font-mono text-xs z-[100] shadow-2xl border-b border-green-900/50 animate-in slide-in-from-top-10 duration-300 flex flex-col">

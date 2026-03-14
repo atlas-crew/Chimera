@@ -13,19 +13,20 @@ import {
   Settings
 } from 'lucide-react';
 import { useRequestInspector, interceptedExchange } from './RequestInspectorProvider';
+import { useCustomEvent } from '../hooks/useCustomEvent';
+import { CHIMERA_EVENTS } from '../lib/config';
 
-export const XRayInspector: React.FC = () => {
+export const XRayInspector: React.FC<{ showLauncher?: boolean }> = ({ showLauncher = true }) => {
   const [isOpen, setIsOpen] = useState(false);
   const { exchanges, clearExchanges } = useRequestInspector();
   const [selectedExchange, setSelectedExchange] = useState<interceptedExchange | null>(null);
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'request' | 'response' | 'headers'>('request');
 
-  // Auto-open on first request if closed? Maybe not.
   // Toggle with Ctrl + X
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'x') {
+      if (e.ctrlKey && e.key.toLowerCase() === 'x') {
         setIsOpen(prev => !prev);
       }
     };
@@ -33,17 +34,22 @@ export const XRayInspector: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Use the new generic hook for safer event handling
+  useCustomEvent(CHIMERA_EVENTS.TOGGLE_XRAY_INSPECTOR, () => {
+    setIsOpen(prev => !prev);
+  });
+
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (!isOpen) {
+  if (!isOpen && showLauncher) {
     return (
       <button 
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 left-6 p-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-lg transition-all hover:scale-110 z-50 group border-2 border-white/20"
+        className="fixed bottom-6 left-20 p-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full shadow-lg transition-all hover:scale-110 z-50 group border-2 border-white/20"
         title="Open X-Ray Inspector (Ctrl+X)"
       >
         <Scan className="w-6 h-6" />
@@ -52,6 +58,10 @@ export const XRayInspector: React.FC = () => {
         </span>
       </button>
     );
+  }
+
+  if (!isOpen) {
+    return null;
   }
 
   return (
