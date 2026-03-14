@@ -57,8 +57,8 @@ just dev
 
 | Service | URL |
 |---------|-----|
-| API | [http://localhost:5000](http://localhost:5000) |
-| Swagger UI | [http://localhost:5000/swagger](http://localhost:5000/swagger) |
+| API | [http://localhost:8880](http://localhost:8880) |
+| Swagger UI | [http://localhost:8880/swagger](http://localhost:8880/swagger) |
 | Web Portal | [http://localhost:5175](http://localhost:5175) |
 
 The Vite dev server proxies `/api` requests to the Flask backend automatically.
@@ -180,6 +180,7 @@ All commands are available through `just` (preferred) or directly via `pnpm nx`.
 ```bash
 just                     # List all available recipes
 just dev                 # Start API + web dev servers concurrently
+just api-start           # Start the API on http://localhost:8880
 just build               # Build all projects
 just test                # Run all tests
 just lint                # Lint all projects
@@ -199,6 +200,10 @@ just publish-api         # Publish chimera-api to PyPI
 
 just graph               # Show the Nx dependency graph
 just affected            # Test only changed projects
+
+pnpm nx run chimera-api:start   # Start the API directly through Nx
+pnpm nx run vuln-web:start      # Start the web dev server directly through Nx
+pnpm nx run-many -t start --parallel=2  # Start both apps through Nx
 ```
 
 ## Testing
@@ -235,6 +240,7 @@ k6 run k6/scenarios/<scenario>.js
 
 | Document | Description |
 |----------|-------------|
+| [Portal Features](docs/portal-features.md) | AI Assistant, X-Ray Inspector, Blue Team, Kill Chain Tracker, Exploit Tour |
 | [Architecture](docs/architecture.md) | System diagrams, request flow, CSP strategy |
 | [API Reference](docs/api-reference.md) | Endpoint catalog organized by domain |
 | [Developer Guide](docs/developer-guide.md) | Setup, testing, contributing, adding new domains |
