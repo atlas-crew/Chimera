@@ -111,6 +111,16 @@ def create_app(config=None):
             response.headers['X-Demo-Throughput-Bytes'] = str(payload_size)
             return response
 
+    apparatus_enabled = bool_env('APPARATUS_ENABLED', default=False)
+    apparatus_base_url = os.environ.get('APPARATUS_BASE_URL', 'http://127.0.0.1:8090').strip()
+    apparatus_timeout_ms = int_env('APPARATUS_TIMEOUT_MS')
+    if apparatus_timeout_ms is None or apparatus_timeout_ms < 1:
+        apparatus_timeout_ms = 5000
+
+    app.config['APPARATUS_ENABLED'] = apparatus_enabled
+    app.config['APPARATUS_BASE_URL'] = apparatus_base_url
+    app.config['APPARATUS_TIMEOUT_MS'] = apparatus_timeout_ms
+
     # Register Security Headers (CSP + CORS)
     @app.after_request
     def add_security_headers(response):
