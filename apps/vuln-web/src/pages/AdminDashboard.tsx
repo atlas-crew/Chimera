@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, 
   Users, 
-  Settings, 
   Activity, 
   Search, 
   Terminal,
@@ -12,31 +11,52 @@ import {
   FileText,
   Info
 } from 'lucide-react';
-import { useSettings } from '../components/SettingsProvider';
+import { type SecurityConfig, useSettings } from '../components/SettingsProvider';
 import { useApi } from '../hooks/useApi';
 import { VulnerabilityModal } from '../components/VulnerabilityModal';
 import { HintChip } from '../components/HintChip';
 import { useVulnerabilityInfo } from '../hooks/useVulnerabilityInfo';
+import { ApparatusPanel } from '../components/ApparatusPanel';
+import { API_BASE_URL } from '../lib/config';
+import { dispatchAttackLog } from '../lib/security';
+
+type DefenseToggleKey = keyof Pick<
+  SecurityConfig,
+  'sqli_protection' | 'xss_protection' | 'bola_protection' | 'ssrf_protection' | 'csrf_protection'
+>;
+
+interface AuditLogEntry {
+  event: string;
+  timestamp: string;
+}
+
+const DEFENSE_TOGGLES: Array<{ id: DefenseToggleKey; label: string; desc: string }> = [
+  { id: 'sqli_protection', label: 'SQLi Filter', desc: 'Parameterized query enforcement' },
+  { id: 'xss_protection', label: 'XSS Sanitizer', desc: 'HTML output encoding' },
+  { id: 'bola_protection', label: 'BOLA Guardian', desc: 'Object-level ownership validation' },
+  { id: 'ssrf_protection', label: 'SSRF Shield', desc: 'Egress IP/Domain allow-listing' },
+  { id: 'csrf_protection', label: 'CSRF Token', desc: 'Synchronizer token pattern' },
+];
 
 export const AdminDashboard: React.FC = () => {
   const { securityConfig, setSecurityConfig } = useSettings();
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [showInfo, setShowInfo] = useState(false);
   
-  const { loading, request } = useApi();
+  const { request } = useApi<{ logs?: AuditLogEntry[] }>();
   const { info: adminInfo } = useVulnerabilityInfo('admin');
 
   useEffect(() => {
     const fetchLogs = async () => {
       const data = await request('/api/v1/saas/audit/logs?limit=10');
       if (data) {
-        setLogs(data.logs || []);
+        setLogs(Array.isArray(data.logs) ? data.logs : []);
       }
     };
     fetchLogs();
   }, [request]);
 
-  const toggleSetting = (key: string) => {
+  const toggleSetting = (key: DefenseToggleKey) => {
     const newConfig = { ...securityConfig, [key]: !securityConfig[key] };
     setSecurityConfig(newConfig);
   };
@@ -83,13 +103,7 @@ export const AdminDashboard: React.FC = () => {
               Defense Pipeline
             </h2>
             <div className="space-y-4">
-              {[
-                { id: 'sqli_protection', label: 'SQLi Filter', desc: 'Parameterized query enforcement' },
-                { id: 'xss_protection', label: 'XSS Sanitizer', desc: 'HTML output encoding' },
-                { id: 'bola_protection', label: 'BOLA Guardian', desc: 'Object-level ownership validation' },
-                { id: 'ssrf_protection', label: 'SSRF Shield', desc: 'Egress IP/Domain allow-listing' },
-                { id: 'csrf_protection', label: 'CSRF Token', desc: 'Synchronizer token pattern' },
-              ].map((defense) => (
+              {DEFENSE_TOGGLES.map((defense) => (
                 <div key={defense.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100">
                   <div>
                     <p className="text-xs font-bold text-slate-800">{defense.label}</p>
@@ -97,7 +111,11 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                   <button 
                     onClick={() => toggleSetting(defense.id)}
-                    className={`w-10 h-5 rounded-full transition-colors relative ${securityConfig[defense.id] ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                    type="button"
+                    role="switch"
+                    aria-checked={securityConfig[defense.id]}
+                    aria-label={defense.label}
+                    className={`w-10 h-5 rounded-full transition-colors relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${securityConfig[defense.id] ? 'bg-emerald-500' : 'bg-slate-300'}`}
                   >
                     <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${securityConfig[defense.id] ? 'left-6' : 'left-1'}`} />
                   </button>
@@ -195,14 +213,18 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="md:col-span-2">
+              <ApparatusPanel />
+            </div>
+
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
               <h2 className="font-bold text-slate-900 mb-4 flex items-center gap-2 text-xs uppercase tracking-widest">
                 <FileText className="w-4 h-4 text-slate-400" />
                 Audit Logs
               </h2>
               <div className="space-y-3">
-                {logs.map((log, i) => (
-                  <div key={i} className="flex gap-3 items-start border-b border-slate-50 pb-2 last:border-0 last:pb-0">
+                {logs.map((log) => (
+                  <div key={`${log.timestamp}-${log.event}`} className="flex gap-3 items-start border-b border-slate-50 pb-2 last:border-0 last:pb-0">
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                     <div>
                       <p className="text-xs font-medium text-slate-800">{log.event}</p>
