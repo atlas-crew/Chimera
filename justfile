@@ -114,3 +114,16 @@ dev:
 # Run a specific Nx target for a project (e.g. just run chimera-api test)
 run project target:
     pnpm nx run {{ project }}:{{ target }}
+
+# ── Docs ───────────────────────────────────────
+
+# Ruby path (Homebrew); override with RUBY_DIR= if needed
+ruby_bin := env("RUBY_DIR", "/opt/homebrew/opt/ruby/bin")
+
+# Serve the documentation site locally (Jekyll, default port 4000)
+docs-serve port="4000":
+    cd docs && PATH="{{ruby_bin}}:$PATH" bundle install --quiet && PATH="{{ruby_bin}}:$PATH" bundle exec jekyll serve --port {{port}} --livereload --livereload-port 35731
+
+# Build the documentation site without serving
+docs-build:
+    cd docs && PATH="{{ruby_bin}}:$PATH" bundle install --quiet && PATH="{{ruby_bin}}:$PATH" bundle exec jekyll build

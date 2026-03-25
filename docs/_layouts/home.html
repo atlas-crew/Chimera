@@ -1,0 +1,88 @@
+---
+layout: default
+---
+<div class="home">
+  <section class="hero">
+    <img src="{{ '/assets/chimera-banner.png' | relative_url }}" alt="Chimera — Intentionally vulnerable monorepo for WAF testing and security education" class="hero-banner">
+  </section>
+
+  <section class="intro">
+    <p class="intro-text">An intentionally vulnerable monorepo for WAF testing and security education. 456+ vulnerable endpoints across 25+ industry domains, bundled with an interactive React portal.</p>
+    <div class="intro-actions">
+      <a href="{{ '/developer-guide' | relative_url }}" class="btn btn-primary">Get Started</a>
+      <a href="https://pypi.org/project/chimera-api/" class="btn btn-outline">Install from PyPI</a>
+      <a href="https://github.com/NickCrew/Chimera" class="btn btn-outline">View on GitHub</a>
+    </div>
+  </section>
+
+  <section class="features-grid">
+    <div class="feature-card">
+      <h3>456+ Vulnerable Endpoints</h3>
+      <p>Banking, healthcare, e-commerce, telecom, energy/SCADA, government, and more — spanning 25+ industry verticals.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Full OWASP Top 10</h3>
+      <p>200+ intentional vulnerabilities: injection, broken auth, IDOR, SSRF, business logic flaws, and beyond.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Interactive React Portal</h3>
+      <p>Industry-themed dashboards, red team console, attack visualizations, and guided exploit walkthroughs.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Single pip install</h3>
+      <p>The React SPA is bundled into the Python wheel. One command gets you a fully functional target environment.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Security Testing Tools</h3>
+      <p>Includes k6 load testing scenarios, Nuclei vulnerability templates, and pre-built Grafana dashboards.</p>
+    </div>
+    <div class="feature-card">
+      <h3>Apparatus Integration</h3>
+      <p>Pairs with Apparatus for defense validation — test WAF rules, honeypots, and deception against real attack surfaces.</p>
+    </div>
+  </section>
+
+  <section class="quickstart">
+    <h2>Quick Start</h2>
+    <div class="quickstart-options">
+      <div class="quickstart-option">
+        <h4>PyPI</h4>
+        <pre><code>pip install chimera-api
+chimera-api --port 8880 --demo-mode full</code></pre>
+      </div>
+      <div class="quickstart-option">
+        <h4>Docker</h4>
+        <pre><code>docker build -t chimera-api apps/vuln-api
+docker run -p 8880:80 -e DEMO_MODE=full chimera-api</code></pre>
+      </div>
+      <div class="quickstart-option">
+        <h4>From Source</h4>
+        <pre><code>git clone https://github.com/NickCrew/Chimera.git
+cd Chimera &amp;&amp; pnpm install
+just dev</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="explore">
+    <h2>Explore</h2>
+    <div class="explore-links">
+      <a href="{{ '/architecture' | relative_url }}" class="explore-card">
+        <h4>Architecture</h4>
+        <p>System design, request flow, and monorepo structure</p>
+      </a>
+      <a href="{{ '/endpoints-catalog' | relative_url }}" class="explore-card">
+        <h4>Endpoint Catalog</h4>
+        <p>Complete listing of all 456+ vulnerable endpoints</p>
+      </a>
+      <a href="{{ '/vulnerability-inventory' | relative_url }}" class="explore-card">
+        <h4>Vulnerability Matrix</h4>
+        <p>200+ intentional flaws cataloged by type and severity</p>
+      </a>
+      <a href="{{ '/portal-features' | relative_url }}" class="explore-card">
+        <h4>Portal Features</h4>
+        <p>AI Assistant, X-Ray Inspector, Kill Chain Tracker</p>
+      </a>
+    </div>
+  </section>
+</div>

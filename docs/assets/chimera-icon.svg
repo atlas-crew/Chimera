@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="110" height="110" viewBox="0 0 110 110" xmlns="http://www.w3.org/2000/svg">
+  <rect width="110" height="110" fill="#0c111c"/>
+  <!-- Three arc segments -->
+  <path d="M55,20 A35,35 0 0,1 86,42" fill="none" stroke="#d946a8" stroke-width="6" stroke-linecap="square"/>
+  <path d="M90,58 A35,35 0 0,1 68,88" fill="none" stroke="#e870c0" stroke-width="6" stroke-linecap="square" opacity="0.7"/>
+  <path d="M42,88 A35,35 0 0,1 20,42" fill="none" stroke="#d946a8" stroke-width="6" stroke-linecap="square" opacity="0.45"/>
+  <!-- Gap sparks -->
+  <circle cx="88" cy="50" r="2.5" fill="#e870c0" opacity="0.6"/>
+  <circle cx="55" cy="92" r="2.5" fill="#e870c0" opacity="0.6"/>
+  <circle cx="22" cy="50" r="2.5" fill="#e870c0" opacity="0.6"/>
+  <!-- Center cracked dot -->
+  <circle cx="55" cy="55" r="5" fill="none" stroke="#d946a8" stroke-width="2.5"/>
+  <line x1="52" y1="52" x2="58" y2="58" stroke="#e870c0" stroke-width="2"/>
+  <!-- Corner brackets -->
+  <g stroke="#6d85a0" stroke-width="1.5" fill="none" opacity="0.3">
+    <polyline points="8,20 8,8 20,8"/>
+    <polyline points="90,8 102,8 102,20"/>
+    <polyline points="102,90 102,102 90,102"/>
+    <polyline points="20,102 8,102 8,90"/>
+  </g>
+</svg>

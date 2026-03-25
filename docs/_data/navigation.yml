@@ -1,0 +1,15 @@
+main:
+  - title: Getting Started
+    url: /developer-guide
+  - title: Architecture
+    url: /architecture
+  - title: API Reference
+    url: /api-reference
+  - title: Endpoints
+    url: /endpoints-catalog
+  - title: Portal
+    url: /portal-features
+  - title: Vulnerabilities
+    url: /vulnerability-inventory
+  - title: VaaS
+    url: /vulnerability-as-a-service

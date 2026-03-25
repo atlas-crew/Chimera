@@ -1,0 +1,43 @@
+title: Chimera
+description: Intentionally vulnerable monorepo for WAF testing and security education
+url: "https://chimera.atlascrew.dev"
+baseurl: ""
+
+plugins:
+  - jekyll-optional-front-matter
+  - jekyll-titles-from-headings
+  - jekyll-relative-links
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+relative_links:
+  enabled: true
+  collections: true
+
+titles_from_headings:
+  strip_title: true
+  collections: true
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: "page"
+  - scope:
+      path: "index.md"
+    values:
+      layout: "home"
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - .DS_Store
+
+sass:
+  sass_dir: _sass
+  style: compressed
+
+markdown: kramdown
+kramdown:
+  syntax_highlighter: rouge
+  input: GFM

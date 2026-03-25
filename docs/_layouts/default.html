@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if page.title %}{{ page.title }} | {% endif %}{{ site.title }}</title>
+  <meta name="description" content="{{ page.description | default: site.description }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Recursive:slnt,wght,CASL,CRSV,MONO@-15..0,300..1000,0..1,0..1,0..1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+  {% seo %}
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="{{ '/' | relative_url }}" class="site-logo">
+        <img src="{{ '/assets/chimera-icon.svg' | relative_url }}" alt="" class="logo-svg" width="28" height="28">
+        <span class="logo-text">Chimera</span>
+      </a>
+      <nav class="main-nav">
+        <button class="nav-toggle" aria-label="Toggle navigation">
+          <span></span><span></span><span></span>
+        </button>
+        <ul class="nav-links">
+          {% for item in site.data.navigation.main %}
+          <li><a href="{{ item.url | relative_url }}"{% if page.url == item.url %} class="active"{% endif %}>{{ item.title }}</a></li>
+          {% endfor %}
+          <li><a href="https://github.com/NickCrew/Chimera" class="nav-github">GitHub</a></li>
+        </ul>
+        <div class="search-wrapper">
+          <input type="text" id="search-input" class="search-input" placeholder="Search docs..." autocomplete="off" aria-label="Search documentation">
+          <div id="search-results" class="search-results"></div>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="site-content">
+    {{ content }}
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <img src="{{ '/assets/chimera-icon.svg' | relative_url }}" alt="" width="22" height="22">
+        <span>Chimera</span>
+      </div>
+      <p class="footer-tagline">{{ site.description }}</p>
+      <div class="footer-links">
+        <a href="https://github.com/NickCrew/Chimera">GitHub</a>
+        <a href="https://github.com/NickCrew/Chimera/issues">Issues</a>
+        <a href="https://pypi.org/project/chimera-api/">PyPI</a>
+      </div>
+      <p class="footer-copyright">MIT License</p>
+    </div>
+  </footer>
+
+  <div class="lightbox" id="lightbox">
+    <img src="" alt="">
+  </div>
+
+  <script src="https://unpkg.com/lunr@2.3.9/lunr.min.js"></script>
+  <script>
+    document.querySelector('.nav-toggle').addEventListener('click', function() {
+      document.querySelector('.nav-links').classList.toggle('open');
+    });
+
+    // Lightbox for diagrams
+    var lightbox = document.getElementById('lightbox');
+    var lightboxImg = lightbox.querySelector('img');
+    document.querySelectorAll('.page-content img[src*="diagram"], .page-content img[src*="assets"]').forEach(function(img) {
+      img.classList.add('zoomable');
+      img.addEventListener('click', function() {
+        lightboxImg.src = this.src;
+        lightboxImg.alt = this.alt;
+        lightbox.classList.add('active');
+      });
+    });
+    lightbox.addEventListener('click', function() {
+      lightbox.classList.remove('active');
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') lightbox.classList.remove('active');
+    });
+
+    // Search
+    (function() {
+      var input = document.getElementById('search-input');
+      var resultsEl = document.getElementById('search-results');
+      var index, docs;
+
+      function loadIndex() {
+        if (index) return Promise.resolve();
+        return fetch('{{ "/search.json" | relative_url }}')
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            docs = data;
+            index = lunr(function() {
+              this.ref('url');
+              this.field('title', { boost: 10 });
+              this.field('content');
+              data.forEach(function(doc) { this.add(doc); }, this);
+            });
+          });
+      }
+
+      function showResults(query) {
+        if (!query || query.length < 2) {
+          resultsEl.classList.remove('active');
+          return;
+        }
+        loadIndex().then(function() {
+          var results = index.search(query + '*');
+          if (!results.length) {
+            resultsEl.innerHTML = '<div class="search-empty">No results</div>';
+          } else {
+            resultsEl.innerHTML = results.slice(0, 8).map(function(r) {
+              var doc = docs.find(function(d) { return d.url === r.ref; });
+              var snippet = doc.content.substring(0, 120).replace(/\n/g, ' ') + '...';
+              return '<a class="search-result" href="' + doc.url + '">'
+                + '<strong>' + doc.title + '</strong>'
+                + '<span>' + snippet + '</span></a>';
+            }).join('');
+          }
+          resultsEl.classList.add('active');
+        });
+      }
+
+      var debounce;
+      input.addEventListener('input', function() {
+        clearTimeout(debounce);
+        debounce = setTimeout(function() { showResults(input.value.trim()); }, 200);
+      });
+
+      input.addEventListener('focus', function() {
+        if (input.value.trim().length >= 2) showResults(input.value.trim());
+      });
+
+      document.addEventListener('click', function(e) {
+        if (!e.target.closest('.search-wrapper')) resultsEl.classList.remove('active');
+      });
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === '/' && !e.target.closest('input, textarea')) {
+          e.preventDefault();
+          input.focus();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
