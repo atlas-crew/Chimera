@@ -3,6 +3,15 @@ description: Intentionally vulnerable monorepo for WAF testing and security educ
 url: "https://chimera.atlascrew.dev"
 baseurl: ""
 
+image:
+  path: /assets/chimera-banner.png
+  width: 1280
+  height: 320
+  alt: "Chimera — Intentionally vulnerable monorepo for WAF testing and security education"
+
+twitter:
+  card: summary_large_image
+
 plugins:
   - jekyll-optional-front-matter
   - jekyll-titles-from-headings
