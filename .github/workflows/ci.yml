@@ -59,6 +59,27 @@ jobs:
       - run: uv sync --extra dev --frozen
       - run: make test-ci
 
+  test-vuln-api-hp:
+    name: Test vuln-api-hp (Rust)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/vuln-api-hp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/vuln-api-hp
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Lint
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --release
+
   build:
     name: Build Package
     runs-on: ubuntu-latest

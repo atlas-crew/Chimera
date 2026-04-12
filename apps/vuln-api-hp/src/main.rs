@@ -1,15 +1,15 @@
 use axum::{
-    Router,
     body::Bytes,
     extract::Query,
     http::{HeaderMap, Method, StatusCode, Uri},
     response::Json,
     routing::get,
+    Router,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, env, net::SocketAddr, time::Duration};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
-use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Serialize)]
 struct HealthResponse {
