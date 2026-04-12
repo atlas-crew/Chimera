@@ -1,0 +1,36 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "chimera-api-hp",
+  "projectType": "application",
+  "root": "apps/vuln-api-hp",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-api-hp",
+        "command": "make build-release"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-api-hp",
+        "command": "make test-ci"
+      }
+    },
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-api-hp",
+        "command": "PORT=8890 make run-release"
+      }
+    },
+    "stop": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/vuln-api-hp",
+        "command": "printf 'chimera-api-hp:start runs in the foreground; stop it with Ctrl+C or terminate the process externally.\\n'"
+      }
+    }
+  }
+}

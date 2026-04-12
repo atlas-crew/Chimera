@@ -1,0 +1,27 @@
+# Production Dockerfile for chimera-api-hp
+# Final image: static binary on scratch — ~5MB total
+FROM rust:1.85-slim AS builder
+
+WORKDIR /app
+
+# Cache dependency build
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo 'fn main() {}' > src/main.rs && cargo build --release && rm -rf src
+
+# Build real binary
+COPY src/ src/
+RUN touch src/main.rs && cargo build --release
+
+# Strip binary for minimal size
+RUN strip /app/target/release/chimera-api-hp
+
+# Scratch — nothing but the binary
+FROM gcr.io/distroless/cc-debian12:nonroot
+
+COPY --from=builder /app/target/release/chimera-api-hp /chimera-api-hp
+
+ENV PORT=8890
+
+EXPOSE 8890
+
+ENTRYPOINT ["/chimera-api-hp"]
