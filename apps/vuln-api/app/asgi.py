@@ -165,12 +165,20 @@ def create_app(config: dict | None = None) -> Starlette:
     """
     cfg = init_config(config)
 
-    # Core routes (more will be mounted as blueprints are ported)
+    # Ported blueprint routers (Tier 1)
+    from app.blueprints.main import main_router
+    from app.blueprints.recorder import recorder_router
+    from app.blueprints.diagnostics import diagnostics_router
+    from app.blueprints.throughput import throughput_router
+
+    # Core infrastructure routes + routes from ported blueprints
     routes = [
-        Route('/healthz', healthz),
-        Route('/api/v1/healthz', healthz),
         Route('/openapi.yaml', openapi_spec),
         Route('/swagger', swagger_ui),
+        *main_router.routes,
+        *recorder_router.routes,
+        *diagnostics_router.routes,
+        *throughput_router.routes,
     ]
 
     # SPA static files

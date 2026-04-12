@@ -171,7 +171,8 @@ def create_app(config=None):
     register_error_handlers(app)
 
     # Import and register blueprints
-    from app.blueprints.main import main_bp
+    # NOTE: main, recorder, diagnostics, throughput have been migrated to
+    # Starlette (see app/asgi.py). They are no longer available under Flask.
     from app.blueprints.auth import auth_bp
     from app.blueprints.banking import banking_bp
     from app.blueprints.mobile import mobile_bp
@@ -193,18 +194,14 @@ def create_app(config=None):
     from app.blueprints.energy_utilities import energy_utilities_bp
     from app.blueprints.admin import admin_bp
     from app.blueprints.testing import testing_bp
-    from app.blueprints.throughput import throughput_bp
     from app.blueprints.genai import genai_bp
-    from app.blueprints.diagnostics import diagnostics_bp
-    from app.blueprints.recorder import recorder_bp
     from app.blueprints.education import education_bp
     from app.middleware.traffic_recorder import TrafficRecorder
 
     # Initialize Traffic Recorder
     TrafficRecorder(app)
 
-    # Register all blueprints
-    app.register_blueprint(main_bp)
+    # Register all blueprints (except Tier 1 which now live on Starlette)
     app.register_blueprint(auth_bp)
     app.register_blueprint(banking_bp)
     app.register_blueprint(mobile_bp)
@@ -226,11 +223,27 @@ def create_app(config=None):
     app.register_blueprint(energy_utilities_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(testing_bp)
-    app.register_blueprint(throughput_bp)
     app.register_blueprint(genai_bp)
-    app.register_blueprint(diagnostics_bp)
-    app.register_blueprint(recorder_bp)
     app.register_blueprint(education_bp)
+
+    # Healthz + home — previously served by main_bp (now Starlette-only).
+    # Provide minimal Flask equivalents so Docker healthchecks and SPA tests work.
+    @app.route('/healthz')
+    @app.route('/api/v1/healthz')
+    def _healthz():
+        return jsonify({"status": "healthy"}), 200
+
+    from flask import render_template_string as _rts
+    from app.utils import DEMO_PAGE_TEMPLATE as _DEMO_PAGE_TEMPLATE
+
+    _web_dist_dir = os.path.join(os.path.dirname(__file__), 'web_dist')
+    _spa_index = os.path.join(_web_dist_dir, 'index.html')
+
+    @app.route('/')
+    def _home():
+        if os.path.isfile(_spa_index):
+            return send_from_directory(_web_dist_dir, 'index.html')
+        return _rts(_DEMO_PAGE_TEMPLATE)
 
     # Register database vulnerable endpoints (if database mode enabled)
     if use_database:

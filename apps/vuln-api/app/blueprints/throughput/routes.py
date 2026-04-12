@@ -1,10 +1,10 @@
 """
 Fast-path endpoints for throughput testing.
 """
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 
-from flask import Response, jsonify, request
-
-from . import throughput_bp
+from . import throughput_router
 from app.config import app_config
 from app.throughput import build_throughput_payload
 
@@ -16,7 +16,7 @@ _SIZE_LABELS = {
 
 
 def _disabled():
-    return jsonify({'error': 'Throughput mode disabled'}), 404
+    return JSONResponse({'error': 'Throughput mode disabled'}, status_code = 404)
 
 
 def _parse_int(value: str):
@@ -31,12 +31,12 @@ def _parse_int(value: str):
 _throughput_payload_cache: dict = {}
 
 
-@throughput_bp.route('/fast/ping')
-def fast_ping():
+@throughput_router.route('/fast/ping')
+async def fast_ping(request: Request):
     if not app_config.throughput_mode:
         return _disabled()
 
-    return jsonify({
+    return JSONResponse({
         'status': 'ok',
         'mode': 'throughput',
         'payload_bytes': app_config.throughput_payload_bytes,
@@ -44,8 +44,8 @@ def fast_ping():
     })
 
 
-@throughput_bp.route('/fast/export')
-def fast_export():
+@throughput_router.route('/fast/export')
+async def fast_export(request: Request):
     if not app_config.throughput_mode:
         return _disabled()
 
@@ -53,12 +53,12 @@ def fast_export():
     max_bytes = app_config.throughput_max_bytes
 
     target_bytes = default_bytes
-    size = request.args.get('size', '').lower()
+    size = request.query_params.get('size', '').lower()
     if size in _SIZE_LABELS:
         target_bytes = _SIZE_LABELS[size]
     else:
-        bytes_param = _parse_int(request.args.get('bytes'))
-        kb_param = _parse_int(request.args.get('kb'))
+        bytes_param = _parse_int(request.query_params.get('bytes'))
+        kb_param = _parse_int(request.query_params.get('kb'))
         if bytes_param and bytes_param > 0:
             target_bytes = bytes_param
         elif kb_param and kb_param > 0:
@@ -72,7 +72,11 @@ def fast_export():
         payload = build_throughput_payload(target_bytes)
         _throughput_payload_cache[target_bytes] = payload
 
-    response = Response(payload, mimetype='application/json')
-    response.headers['X-Demo-Throughput'] = 'true'
-    response.headers['X-Demo-Throughput-Bytes'] = str(len(payload))
-    return response
+    return Response(
+        content=payload,
+        media_type='application/json',
+        headers={
+            'X-Demo-Throughput': 'true',
+            'X-Demo-Throughput-Bytes': str(len(payload)),
+        },
+    )

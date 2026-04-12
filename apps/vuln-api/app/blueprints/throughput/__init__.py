@@ -1,9 +1,8 @@
 """
 Throughput blueprint.
 """
+from app.routing import DecoratorRouter as Router
 
-from flask import Blueprint
-
-throughput_bp = Blueprint('throughput', __name__)
+throughput_router = Router(routes=[])
 
 from . import routes

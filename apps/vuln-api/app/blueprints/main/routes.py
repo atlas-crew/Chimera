@@ -1,21 +1,21 @@
 """
 Routes for main endpoints.
 """
-
-from flask import request, jsonify, render_template_string, session
+from starlette.requests import Request
+from starlette.responses import JSONResponse, HTMLResponse
 from datetime import datetime, timedelta
 import uuid
 import random
 import json
 import time
 
-from . import main_bp
+from . import main_router
 from app.models import *
 from app.utils import DEMO_PAGE_TEMPLATE
 
-@main_bp.route('/healthz')
-@main_bp.route('/api/v1/healthz')
-def healthz():
+@main_router.route('/healthz')
+@main_router.route('/api/v1/healthz')
+async def healthz(request: Request):
     """
     Health check endpoint for Docker healthcheck and frontend connectivity
     ---
@@ -31,12 +31,12 @@ def healthz():
               type: string
               example: "healthy"
     """
-    return jsonify({"status": "healthy"}), 200
+    return JSONResponse({"status": "healthy"}, status_code = 200)
 
 
-@main_bp.route('/')
-def home():
+@main_router.route('/')
+async def home(request: Request):
     """Main demo page showing available endpoints"""
-    return render_template_string(DEMO_PAGE_TEMPLATE)
+    return HTMLResponse(DEMO_PAGE_TEMPLATE)
 
 

@@ -1,9 +1,8 @@
 """
 Main blueprint.
 """
+from app.routing import DecoratorRouter as Router
 
-from flask import Blueprint
-
-main_bp = Blueprint('main', __name__)
+main_router = Router(routes=[])
 
 from . import routes
