@@ -186,12 +186,12 @@ def create_app(config=None):
     from app.blueprints.checkout import checkout_bp
     from app.blueprints.payments import payments_bp
     from app.blueprints.insurance import insurance_bp
-    from app.blueprints.attack_sim import attack_sim_bp
     from app.blueprints.integrations import integrations_bp
     from app.blueprints.saas import saas_bp
     from app.blueprints.admin import admin_bp
     from app.blueprints.testing import testing_bp
     from app.blueprints.education import education_bp
+    from app.blueprints.attack_sim import attack_sim_router
     from app.blueprints.government import government_router
     from app.blueprints.telecom import telecom_router
     from app.blueprints.energy_utilities import energy_utilities_router
@@ -216,13 +216,13 @@ def create_app(config=None):
     app.register_blueprint(checkout_bp)
     app.register_blueprint(payments_bp)
     app.register_blueprint(insurance_bp)
-    app.register_blueprint(attack_sim_bp)
     app.register_blueprint(integrations_bp)
     app.register_blueprint(saas_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(testing_bp)
     app.register_blueprint(education_bp)
 
+    register_flask_compat_routes(app, attack_sim_router, endpoint_prefix='attack_sim')
     register_flask_compat_routes(app, government_router, endpoint_prefix='government')
     register_flask_compat_routes(app, telecom_router, endpoint_prefix='telecom')
     register_flask_compat_routes(app, energy_utilities_router, endpoint_prefix='energy_utilities')

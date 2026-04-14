@@ -1,9 +1,8 @@
 """
 Attack Sim blueprint.
 """
+from app.routing import DecoratorRouter as Router
 
-from flask import Blueprint
-
-attack_sim_bp = Blueprint('attack_sim', __name__)
+attack_sim_router = Router(routes=[])
 
 from . import routes

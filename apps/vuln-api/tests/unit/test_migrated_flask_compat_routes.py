@@ -37,6 +37,7 @@ def assert_matching_error_contract(flask_response, asgi_response):
         ("/api/loyalty/program/details", 200, "points_expiry_days", 365),
         ("/api/compliance/status", 200, "audit_ready", True),
         ("/api/v1/genai/models/config", 200, "active_model", "gpt-4-turbo"),
+        ("/api/recon/advanced", 200, "tech_stack", ["kubernetes", "istio", "postgres", "redis"]),
     ],
 )
 def test_migrated_routes_remain_reachable_via_flask_compat(client, path, expected_status, field, expected_value):
@@ -47,6 +48,8 @@ def test_migrated_routes_remain_reachable_via_flask_compat(client, path, expecte
     if isinstance(expected_value, dict):
         for key, value in expected_value.items():
             assert data[field][key] == value
+    elif isinstance(expected_value, list):
+        assert data[field] == expected_value
     else:
         assert data[field] == expected_value
 
@@ -162,6 +165,38 @@ def test_genai_graphql_batch_parity_between_flask_and_asgi(client, asgi_client):
     assert len(asgi_response.json()) == 2
     assert flask_response.get_json()[0]["data"]["systemInfo"]["version"] == "2.1.0"
     assert asgi_response.json()[0]["data"]["systemInfo"]["version"] == "2.1.0"
+
+
+def test_attack_sim_coordination_parity_between_flask_and_asgi(client, asgi_client):
+    payload = {"stage": "persistence", "agents": ["ghost", "ember"]}
+
+    flask_response = client.post("/api/coordination", json=payload)
+    asgi_response = asgi_client.post("/api/coordination", json=payload)
+
+    assert flask_response.status_code == 200
+    assert asgi_response.status_code == 200
+    assert flask_response.get_json()["stage"] == "persistence"
+    assert asgi_response.json()["stage"] == "persistence"
+    assert flask_response.get_json()["agents"] == ["ghost", "ember"]
+    assert asgi_response.json()["agents"] == ["ghost", "ember"]
+    assert flask_response.get_json()["distributed_execution"] is True
+    assert asgi_response.json()["distributed_execution"] is True
+
+
+def test_attack_sim_command_execution_parity_between_flask_and_asgi(client, asgi_client):
+    payload = {"command": "whoami", "targets": ["dc-01"], "mode": "sequential"}
+
+    flask_response = client.post("/api/commands/execute", json=payload)
+    asgi_response = asgi_client.post("/api/commands/execute", json=payload)
+
+    assert flask_response.status_code == 200
+    assert asgi_response.status_code == 200
+    assert flask_response.get_json()["command"] == "whoami"
+    assert asgi_response.json()["command"] == "whoami"
+    assert flask_response.get_json()["mode"] == "sequential"
+    assert asgi_response.json()["mode"] == "sequential"
+    assert flask_response.get_json()["command_acknowledged"] is True
+    assert asgi_response.json()["command_acknowledged"] is True
 
 
 def test_malformed_json_rejected_by_flask_and_asgi(client, asgi_client):

@@ -1,19 +1,18 @@
 """
 Routes for attack sim endpoints.
 """
-
-from flask import request, jsonify, render_template_string, session
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from datetime import datetime, timedelta
 import uuid
 import random
-import json
-import time
 
-from . import attack_sim_bp
+from . import attack_sim_router
 from app.models import *
+from app.routing import get_json_or_default
 
-@attack_sim_bp.route('/api/recon/advanced')
-def recon_advanced():
+@attack_sim_router.route('/api/recon/advanced')
+async def recon_advanced(request: Request):
     """Advanced reconnaissance data"""
     data = {
         'external_services': ['vpn-gateway', 'hr-portal', 'finance-sftp'],
@@ -21,36 +20,36 @@ def recon_advanced():
         'high_value_targets': ['cfo@chimera.com', 'security@chimera.com']
     }
     apt_operations_log.append({'type': 'recon', 'data': data, 'timestamp': datetime.now().isoformat()})
-    return jsonify(data)
+    return JSONResponse(data)
 
 
-@attack_sim_bp.route('/api/intelligence/gather', methods=['POST'])
-def intelligence_gather():
+@attack_sim_router.route('/api/intelligence/gather', methods=['POST'])
+async def intelligence_gather(request: Request):
     """Gather internal intelligence"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     target = data.get('target', 'executive')
     apt_operations_log.append({'type': 'intelligence', 'target': target, 'timestamp': datetime.now().isoformat()})
-    return jsonify({
+    return JSONResponse({
         'target': target,
         'intel_gathered': ['calendar_entries', 'travel_itineraries', 'org_charts'],
         'cred_leak_detected': True
     })
 
 
-@attack_sim_bp.route('/api/employees/directory')
-def employees_directory():
+@attack_sim_router.route('/api/employees/directory')
+async def employees_directory(request: Request):
     """Enumerate employees"""
     employees = [
         {'name': 'Alice Johnson', 'email': 'alice.johnson@chimera.com', 'role': 'Security Engineer'},
         {'name': 'Bob Williams', 'email': 'bob.williams@chimera.com', 'role': 'Finance Manager'}
     ]
-    return jsonify({'employees': employees, 'total': len(employees), 'sensitive': True})
+    return JSONResponse({'employees': employees, 'total': len(employees), 'sensitive': True})
 
 
-@attack_sim_bp.route('/api/technologies/stack')
-def technologies_stack():
+@attack_sim_router.route('/api/technologies/stack')
+async def technologies_stack(request: Request):
     """Expose technology stack"""
-    return jsonify({
+    return JSONResponse({
         'frontend': ['React', 'Next.js'],
         'backend': ['Flask', 'Node.js', 'Go'],
         'infrastructure': ['Kubernetes', 'Terraform', 'Vault'],
@@ -58,29 +57,29 @@ def technologies_stack():
     })
 
 
-@attack_sim_bp.route('/api/social/engineering', methods=['POST'])
-def social_engineering():
+@attack_sim_router.route('/api/social/engineering', methods=['POST'])
+async def social_engineering(request: Request):
     """Launch social engineering campaign"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     campaign_id = f"SOC-{uuid.uuid4().hex[:8]}"
     apt_operations_log.append({'type': 'social', 'campaign': campaign_id, 'timestamp': datetime.now().isoformat()})
-    return jsonify({
+    return JSONResponse({
         'campaign_id': campaign_id,
         'targets': data.get('targets', ['employees']),
         'success_probability': random.uniform(0.2, 0.9)
     })
 
 
-@attack_sim_bp.route('/api/vulnerabilities/scan', methods=['POST'])
-def vulnerabilities_scan():
+@attack_sim_router.route('/api/vulnerabilities/scan', methods=['POST'])
+async def vulnerabilities_scan(request: Request):
     """Trigger vulnerability scans"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     scope = data.get('scope', ['external', 'internal'])
     findings = [
         {'id': 'CVE-2025-1234', 'severity': 'critical', 'asset': 'vpn-gateway'},
         {'id': 'CVE-2024-2443', 'severity': 'high', 'asset': 'billing-service'}
     ]
-    return jsonify({
+    return JSONResponse({
         'scan_scope': scope,
         'findings': findings,
         'scan_id': f"SCAN-{uuid.uuid4().hex[:8]}",
@@ -88,13 +87,13 @@ def vulnerabilities_scan():
     })
 
 
-@attack_sim_bp.route('/api/lateral/movement', methods=['POST'])
-def lateral_movement():
+@attack_sim_router.route('/api/lateral/movement', methods=['POST'])
+async def lateral_movement(request: Request):
     """Simulate lateral movement"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     start_host = data.get('start_host', 'workstation-01')
     path = ['workstation-01', 'file-server', 'domain-controller']
-    return jsonify({
+    return JSONResponse({
         'start_host': start_host,
         'movement_path': path,
         'credentials_used': ['svc-backup', 'svc-monitor'],
@@ -102,12 +101,12 @@ def lateral_movement():
     })
 
 
-@attack_sim_bp.route('/api/privilege/escalation', methods=['POST'])
-def privilege_escalation():
+@attack_sim_router.route('/api/privilege/escalation', methods=['POST'])
+async def privilege_escalation(request: Request):
     """Privilege escalation attempt"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     exploit = data.get('exploit', 'kernel_priv_esc')
-    return jsonify({
+    return JSONResponse({
         'exploit_used': exploit,
         'escalated_to': 'domain_admin',
         'persistence_installed': True,
@@ -115,10 +114,10 @@ def privilege_escalation():
     })
 
 
-@attack_sim_bp.route('/api/credentials/harvest')
-def credentials_harvest():
+@attack_sim_router.route('/api/credentials/harvest')
+async def credentials_harvest(request: Request):
     """Harvest credentials listing"""
-    return jsonify({
+    return JSONResponse({
         'credentials': [
             {'user': 'svc-backup', 'password': 'P@ssw0rd1!', 'privilege': 'high'},
             {'user': 'db-admin', 'password': 'Summer2025!', 'privilege': 'critical'}
@@ -127,24 +126,24 @@ def credentials_harvest():
     })
 
 
-@attack_sim_bp.route('/api/persistence/establish', methods=['POST'])
-def persistence_establish():
+@attack_sim_router.route('/api/persistence/establish', methods=['POST'])
+async def persistence_establish(request: Request):
     """Establish persistence"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     technique = data.get('technique', 'scheduled_task')
-    return jsonify({
+    return JSONResponse({
         'persistence_technique': technique,
         'survives_reboot': True,
         'cleanup_script_present': False
     })
 
 
-@attack_sim_bp.route('/api/backdoors/install', methods=['POST'])
-def backdoors_install():
+@attack_sim_router.route('/api/backdoors/install', methods=['POST'])
+async def backdoors_install(request: Request):
     """Install system backdoors"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     host = data.get('host', 'domain-controller')
-    return jsonify({
+    return JSONResponse({
         'host': host,
         'backdoor_id': f"BD-{uuid.uuid4().hex[:10]}",
         'persistence': 'registry_run_key',
@@ -152,22 +151,22 @@ def backdoors_install():
     })
 
 
-@attack_sim_bp.route('/api/domain/admin/impersonate')
-def domain_admin_impersonate():
+@attack_sim_router.route('/api/domain/admin/impersonate')
+async def domain_admin_impersonate(request: Request):
     """Domain admin impersonation"""
-    return jsonify({
+    return JSONResponse({
         'impersonated_account': 'administrator@chimera.local',
         'kerberos_ticket': 'base64::S0VSQkVST1M=',
         'valid_until': (datetime.now() + timedelta(hours=8)).isoformat()
     })
 
 
-@attack_sim_bp.route('/api/certificates/forge', methods=['POST'])
-def certificates_forge():
+@attack_sim_router.route('/api/certificates/forge', methods=['POST'])
+async def certificates_forge(request: Request):
     """Forge certificates"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     cn = data.get('common_name', 'auth.chimera.local')
-    return jsonify({
+    return JSONResponse({
         'certificate_cn': cn,
         'valid_from': datetime.now().isoformat(),
         'valid_to': (datetime.now() + timedelta(days=365)).isoformat(),
@@ -176,66 +175,74 @@ def certificates_forge():
     })
 
 
-@attack_sim_bp.route('/api/forensics/anti', methods=['POST'])
-def forensics_anti():
+@attack_sim_router.route('/api/forensics/anti', methods=['POST'])
+async def forensics_anti(request: Request):
     """Anti-forensics operations"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     techniques = data.get('techniques', ['timestamp_manipulation'])
-    return jsonify({
+    return JSONResponse({
         'techniques': techniques,
         'effectiveness': 'high',
         'evidence_destroyed': True
     })
 
 
-@attack_sim_bp.route('/api/timestamps/modify', methods=['PUT'])
-def timestamps_modify():
+@attack_sim_router.route('/api/timestamps/modify', methods=['PUT'])
+async def timestamps_modify(request: Request):
     """Modify timestamps"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     offset_minutes = data.get('offset_minutes', -120)
-    return jsonify({
+    return JSONResponse({
         'offset_minutes': offset_minutes,
         'files_modified': data.get('files', 25),
         'detection_risk': 'medium'
     })
 
 
-@attack_sim_bp.route('/api/evidence/destroy', methods=['POST'])
-def evidence_destroy():
+@attack_sim_router.route('/api/evidence/destroy', methods=['POST'])
+async def evidence_destroy(request: Request):
     """Destroy forensic evidence"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     targets = data.get('targets', ['memory_dumps', 'packet_captures'])
-    return jsonify({
+    return JSONResponse({
         'targets': targets,
         'successful': True,
         'irrecoverable': True
     })
 
 
-@attack_sim_bp.route('/api/incident/response/disrupt')
-def incident_response_disrupt():
+@attack_sim_router.route('/api/incident/response/disrupt')
+async def incident_response_disrupt(request: Request):
     """Disrupt incident response"""
-    return jsonify({
+    return JSONResponse({
         'playbooks_disabled': ['containment', 'eradication'],
         'communication_channels': ['slack', 'pagerduty'],
         'mttr_increase_minutes': 180
     })
 
 
-@attack_sim_bp.route('/api/coordination', methods=['POST'])
-def apt_coordination():
+@attack_sim_router.route('/api/coordination', methods=['POST'])
+async def apt_coordination(request: Request):
     """
     APT coordination endpoint for multi-stage attack orchestration
     INTENTIONAL VULNERABILITY: Allows threat actors to coordinate distributed attacks
     """
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     operation_id = data.get('operation_id', f"OP-{uuid.uuid4().hex[:8]}")
     stage = data.get('stage', 'reconnaissance')
     agents = data.get('agents', [])
+    return JSONResponse({
+        'operation_id': operation_id,
+        'stage': stage,
+        'agents': agents,
+        'coordination_status': 'active',
+        'distributed_execution': True,
+        'fallback_channels': ['dns-tunnel', 'https-beacon'],
+    })
 
 
-@attack_sim_bp.route('/api/exfiltration/channels')
-def exfiltration_channels():
+@attack_sim_router.route('/api/exfiltration/channels')
+async def exfiltration_channels(request: Request):
     """
     Data exfiltration channel enumeration
     INTENTIONAL VULNERABILITY: Exposes available covert data exfiltration methods
@@ -288,21 +295,29 @@ def exfiltration_channels():
         'compression': 'gzip',
         'active': True
     }
+    return JSONResponse(channels)
 
 
-@attack_sim_bp.route('/api/data/collect', methods=['POST'])
-def data_collection():
+@attack_sim_router.route('/api/data/collect', methods=['POST'])
+async def data_collection(request: Request):
     """
     Automated sensitive data collection
     INTENTIONAL VULNERABILITY: Enables automated harvesting of sensitive information
     """
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     targets = data.get('targets', ['documents', 'credentials', 'source_code'])
     depth = data.get('depth', 'standard')
+    return JSONResponse({
+        'targets': targets,
+        'depth': depth,
+        'collection_id': f"COL-{uuid.uuid4().hex[:8]}",
+        'estimated_records': 1250 if depth == 'standard' else 5000,
+        'stealth_mode': True,
+    })
 
 
-@attack_sim_bp.route('/api/communication/covert')
-def covert_communication():
+@attack_sim_router.route('/api/communication/covert')
+async def covert_communication(request: Request):
     """
     Covert communication channel status
     INTENTIONAL VULNERABILITY: Provides status of stealth C2 communication channels
@@ -349,22 +364,31 @@ def covert_communication():
         'detection_probability': 'low',
         'failover_enabled': True
     }
+    return JSONResponse(communication_status)
 
 
-@attack_sim_bp.route('/api/commands/execute', methods=['POST'])
-def command_execution():
+@attack_sim_router.route('/api/commands/execute', methods=['POST'])
+async def command_execution(request: Request):
     """
     Remote command execution endpoint
     INTENTIONAL VULNERABILITY: Allows arbitrary command execution on compromised systems
     """
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     command = data.get('command', '')
     targets = data.get('targets', [])
     execution_mode = data.get('mode', 'parallel')
+    return JSONResponse({
+        'command': command,
+        'targets': targets,
+        'mode': execution_mode,
+        'execution_id': f"EXEC-{uuid.uuid4().hex[:8]}",
+        'command_acknowledged': bool(command),
+        'sandboxing': 'disabled',
+    })
 
 
-@attack_sim_bp.route('/api/targets/high-value')
-def high_value_targets():
+@attack_sim_router.route('/api/targets/high-value')
+async def high_value_targets(request: Request):
     """
     High-value target identification
     INTENTIONAL VULNERABILITY: Exposes critical assets and personnel for targeted attacks
@@ -434,22 +458,30 @@ def high_value_targets():
         'recommended_targets': ['executives[0]', 'critical_systems[0]'],
         'attack_surface_score': 8.5
     }
+    return JSONResponse(hvt_data)
 
 
-@attack_sim_bp.route('/api/operations/coordinate', methods=['POST'])
-def operations_coordination():
+@attack_sim_router.route('/api/operations/coordinate', methods=['POST'])
+async def operations_coordination(request: Request):
     """
     Multi-vector attack coordination
     INTENTIONAL VULNERABILITY: Enables synchronized multi-stage attack orchestration
     """
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     operation_name = data.get('operation_name', f"OPERATION-{uuid.uuid4().hex[:6].upper()}")
     attack_vectors = data.get('attack_vectors', [])
     timing = data.get('timing', 'immediate')
+    return JSONResponse({
+        'operation_name': operation_name,
+        'attack_vectors': attack_vectors,
+        'timing': timing,
+        'orchestration_status': 'queued',
+        'parallel_stages': len(attack_vectors),
+    })
 
 
-@attack_sim_bp.route('/api/mission/objectives')
-def mission_objectives():
+@attack_sim_router.route('/api/mission/objectives')
+async def mission_objectives(request: Request):
     """
     APT mission objectives and target intelligence
     INTENTIONAL VULNERABILITY: Exposes strategic objectives and intelligence requirements
@@ -524,12 +556,13 @@ def mission_objectives():
         'end_state': 'long_term_access_maintained',
         'last_updated': datetime.now().isoformat()
     }
+    return JSONResponse(objectives)
 
 
-@attack_sim_bp.route('/api/vulnerabilities/report')
-def vulnerabilities_report():
+@attack_sim_router.route('/api/vulnerabilities/report')
+async def vulnerabilities_report(request: Request):
     """Get vulnerabilities assessment report"""
-    return jsonify({
+    return JSONResponse({
         'report_id': f"VULN-RPT-{datetime.now().strftime('%Y%m%d')}",
         'scan_date': datetime.now().isoformat(),
         'vulnerabilities': [
@@ -573,5 +606,4 @@ def vulnerabilities_report():
         'remediation_priority': ['CVE-2024-12345', 'CVE-2024-54321', 'CVE-2024-11111'],
         'next_scan_scheduled': (datetime.now() + timedelta(days=7)).isoformat()
     })
-
 

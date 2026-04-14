@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - codex
 created_date: '2026-04-12 04:07'
-updated_date: '2026-04-14 23:39'
+updated_date: '2026-04-14 23:50'
 labels:
   - refactor
 dependencies: []
@@ -109,4 +109,14 @@ Added focused coverage in tests/unit/test_genai_routes.py and expanded tests/uni
 Source review artifacts for this wave: .agents/reviews/review-20260414-192436.md (initial BLOCKED on blocking time.sleep in async handlers), then .agents/reviews/review-20260414-192831.md (PASS WITH ISSUES after asyncio.sleep migration and adapter/type clarifications).
 
 Test audit artifact: .agents/reviews/test-audit-20260414-193416.md. Audit calls out additional branch and endpoint coverage still missing across genai, ics_ot, infrastructure, routing, and ASGI middleware; it does not identify a regression in the genai migration slice.
+
+2026-04-14: Migrated attack_sim into the Starlette mixed-mode path. app/asgi.py now mounts attack_sim_router, create_app() no longer registers attack_sim_bp directly, and Flask compatibility is preserved via register_flask_compat_routes(app, attack_sim_router, endpoint_prefix='attack_sim').
+
+This wave also repaired eight pre-existing dead Flask endpoints in attack_sim/routes.py that previously built payloads but returned no body: /api/coordination, /api/exfiltration/channels, /api/data/collect, /api/communication/covert, /api/commands/execute, /api/targets/high-value, /api/operations/coordinate, and /api/mission/objectives now return explicit JSON contracts instead of empty 200 responses.
+
+Added focused coverage in tests/unit/test_attack_sim_routes.py and expanded tests/unit/test_migrated_flask_compat_routes.py with attack_sim reachability and Flask-vs-ASGI parity checks for the repaired endpoints. Verification: cd apps/vuln-api && uv run pytest tests/unit/test_attack_sim_routes.py tests/unit/test_migrated_flask_compat_routes.py tests/unit/test_genai_routes.py tests/unit/test_routing.py tests/unit/test_ics_ot_routes.py tests/unit/test_infrastructure_routes.py tests/unit/test_security_ops_routes.py tests/unit/test_loyalty_routes.py tests/unit/test_compliance_routes.py tests/unit/test_government_routes.py tests/unit/test_telecom_routes.py tests/unit/test_energy_utilities_routes.py tests/unit/test_banking_routes.py tests/unit/test_hotpatch.py -q -> 97 passed in 6.46s.
+
+Source review artifact: .agents/reviews/review-20260414-194453.md (PASS WITH ISSUES). Main note is that the migration intentionally turns the eight dead endpoints into real JSON responses and that downstream consumers should use the new payloads instead of empty bodies.
+
+Test audit artifact: .agents/reviews/test-audit-20260414-194733.md. Audit flags broader remaining route coverage across attack_sim and genai but no regression in the migrated attack_sim slice.
 <!-- SECTION:NOTES:END -->

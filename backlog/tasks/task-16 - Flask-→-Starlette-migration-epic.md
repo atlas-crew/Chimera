@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - codex
 created_date: '2026-04-12 04:06'
-updated_date: '2026-04-14 23:39'
+updated_date: '2026-04-14 23:50'
 labels:
   - refactor
 dependencies: []
@@ -77,4 +77,8 @@ Wave receipt: targeted regression batch passed with 78 tests; source reviews in 
 2026-04-14: Completed another Tier 2 Starlette migration wave by moving genai onto the ASGI app and preserving create_app() reachability through the Flask compatibility bridge.
 
 Wave receipt: targeted regression batch passed with 88 tests in 6.72s; source review artifacts .agents/reviews/review-20260414-192436.md and review-20260414-192831.md; test audit artifact .agents/reviews/test-audit-20260414-193416.md.
+
+2026-04-14: Completed another Tier 2 Starlette migration wave by moving attack_sim onto the ASGI app and preserving create_app() reachability through the Flask compatibility bridge.
+
+Wave receipt: targeted regression batch passed with 97 tests in 6.46s; source review artifact .agents/reviews/review-20260414-194453.md; test audit artifact .agents/reviews/test-audit-20260414-194733.md. This wave also repaired eight previously dead attack_sim endpoints that were returning empty 200 responses in Flask.
 <!-- SECTION:NOTES:END -->
