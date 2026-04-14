@@ -165,11 +165,14 @@ def create_app(config: dict | None = None) -> Starlette:
     """
     cfg = init_config(config)
 
-    # Ported blueprint routers (Tier 1)
+    # Ported blueprint routers (Tier 1 + first Tier 2 wave)
     from app.blueprints.main import main_router
     from app.blueprints.recorder import recorder_router
     from app.blueprints.diagnostics import diagnostics_router
     from app.blueprints.throughput import throughput_router
+    from app.blueprints.government import government_router
+    from app.blueprints.telecom import telecom_router
+    from app.blueprints.energy_utilities import energy_utilities_router
 
     # Core infrastructure routes + routes from ported blueprints
     routes = [
@@ -179,6 +182,9 @@ def create_app(config: dict | None = None) -> Starlette:
         *recorder_router.routes,
         *diagnostics_router.routes,
         *throughput_router.routes,
+        *government_router.routes,
+        *telecom_router.routes,
+        *energy_utilities_router.routes,
     ]
 
     # SPA static files

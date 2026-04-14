@@ -5,12 +5,14 @@ Pytest configuration and shared fixtures for api-demo tests.
 import sys
 from pathlib import Path
 import pytest
+from starlette.testclient import TestClient
 
 # Add app directory to Python path
 app_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(app_dir))
 
 from app import create_app
+from app.asgi import create_app as create_asgi_app
 from app.models import (
     users_db, add_user, username_to_id_map, email_to_id_map,
     medical_records_db, claims_db,
@@ -64,6 +66,20 @@ def app():
 def client(app):
     """Create test client."""
     return app.test_client()
+
+
+@pytest.fixture
+def asgi_app():
+    """Create Starlette application for migrated route testing."""
+    app = create_asgi_app({"TESTING": True})
+    yield app
+
+
+@pytest.fixture
+def asgi_client(asgi_app):
+    """Create ASGI test client for migrated Starlette routes."""
+    with TestClient(asgi_app) as client:
+        yield client
 
 
 @pytest.fixture

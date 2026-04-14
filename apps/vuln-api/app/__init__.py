@@ -171,8 +171,9 @@ def create_app(config=None):
     register_error_handlers(app)
 
     # Import and register blueprints
-    # NOTE: main, recorder, diagnostics, throughput have been migrated to
-    # Starlette (see app/asgi.py). They are no longer available under Flask.
+    # NOTE: main, recorder, diagnostics, throughput, government, telecom, and
+    # energy_utilities have been migrated to Starlette (see app/asgi.py).
+    # They are no longer available under Flask.
     from app.blueprints.auth import auth_bp
     from app.blueprints.banking import banking_bp
     from app.blueprints.mobile import mobile_bp
@@ -188,10 +189,7 @@ def create_app(config=None):
     from app.blueprints.ics_ot import ics_ot_bp
     from app.blueprints.security_ops import security_ops_bp
     from app.blueprints.integrations import integrations_bp
-    from app.blueprints.government import government_bp
     from app.blueprints.saas import saas_bp
-    from app.blueprints.telecom import telecom_bp
-    from app.blueprints.energy_utilities import energy_utilities_bp
     from app.blueprints.admin import admin_bp
     from app.blueprints.testing import testing_bp
     from app.blueprints.genai import genai_bp
@@ -201,7 +199,7 @@ def create_app(config=None):
     # Initialize Traffic Recorder
     TrafficRecorder(app)
 
-    # Register all blueprints (except Tier 1 which now live on Starlette)
+    # Register remaining Flask blueprints (Tier 1 + first Tier 2 wave now live on Starlette)
     app.register_blueprint(auth_bp)
     app.register_blueprint(banking_bp)
     app.register_blueprint(mobile_bp)
@@ -217,10 +215,7 @@ def create_app(config=None):
     app.register_blueprint(ics_ot_bp)
     app.register_blueprint(security_ops_bp)
     app.register_blueprint(integrations_bp)
-    app.register_blueprint(government_bp)
     app.register_blueprint(saas_bp)
-    app.register_blueprint(telecom_bp)
-    app.register_blueprint(energy_utilities_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(testing_bp)
     app.register_blueprint(genai_bp)

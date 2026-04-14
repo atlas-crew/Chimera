@@ -1,9 +1,11 @@
 ---
 id: TASK-16.1
 title: 'Migrate Tier 2 blueprints (standard routes, 11 blueprints)'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - codex
 created_date: '2026-04-12 04:07'
+updated_date: '2026-04-14 15:35'
 labels:
   - refactor
 dependencies: []
@@ -57,3 +59,28 @@ Run the flask_to_starlette.py codemod on 11 Tier 2 blueprints and wire them into
 - [ ] #6 Flask test suite passes (632 tests, allowing for Tier 1+2 shims)
 - [ ] #7 Smoke test confirms representative endpoint from each blueprint works on uvicorn
 <!-- AC:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Audit Tier 2 blueprints and their existing test coverage to choose a safe first migration chunk that can move off Flask without losing verification.
+2. Improve the migration pattern where needed (router shim, codemod, and/or test fixtures) so migrated routes can be exercised through the ASGI app while unmigrated routes continue using Flask.
+3. Convert the first Tier 2 blueprint subset, mount those routers in app/asgi.py, remove them from app/__init__.py, and migrate their tests to the appropriate client path.
+4. Verify targeted pytest coverage after each migrated blueprint group before expanding to the remaining Tier 2 set.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Migrated first Tier 2 wave into Starlette: government, telecom, and energy_utilities now mount in app/asgi.py while Flask create_app() deregisters those blueprints.
+
+Added parallel ASGI pytest fixtures in tests/conftest.py and converted the three migrated route suites to TestClient/json() semantics so Starlette routes can be exercised without breaking remaining Flask tests.
+
+Extended app/routing.py so the decorator shim forwards path params, preserves Flask-like static-over-dynamic route precedence, and exposes get_json_or_default() for lenient JSON parsing during migration.
+
+Verification: cd apps/vuln-api && uv run pytest tests/unit/test_government_routes.py tests/unit/test_telecom_routes.py tests/unit/test_energy_utilities_routes.py tests/unit/test_banking_routes.py tests/unit/test_hotpatch.py tests/unit/test_routing.py -q -> 36 passed in 0.54s.
+
+Source review receipts: .agents/reviews/review-20260414-111916.md (blocked on JSON parsing), .agents/reviews/review-20260414-112325.md (pass with issues), .agents/reviews/review-20260414-112739.md (source-only pass with issues, no P0/P1).
+
+Test audit receipt: .agents/reviews/test-audit-20260414-113044.md. Main findings are broader missing endpoint coverage across these blueprints and helper edge cases; no regression was found in the migrated route/test slice.
+<!-- SECTION:NOTES:END -->

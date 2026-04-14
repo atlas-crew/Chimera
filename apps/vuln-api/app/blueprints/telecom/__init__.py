@@ -1,9 +1,8 @@
 """
 Telecom blueprint.
 """
+from app.routing import DecoratorRouter as Router
 
-from flask import Blueprint
-
-telecom_bp = Blueprint('telecom', __name__)
+telecom_router = Router(routes=[])
 
 from . import routes

@@ -2,22 +2,23 @@
 Routes for telecom endpoints.
 Demonstrates subscriber identity, network provisioning, and billing abuse vulnerabilities.
 """
-
-from flask import request, jsonify
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from datetime import datetime
 import uuid
 import random
 
-from . import telecom_bp
+from . import telecom_router
 from app.models import *
+from app.routing import get_json_or_default
 
 
 # ============================================================================
 # SUBSCRIBER PORTAL & IDENTITY
 # ============================================================================
 
-@telecom_bp.route('/api/v1/telecom/subscribers/<subscriber_id>/profile')
-def subscriber_profile(subscriber_id):
+@telecom_router.route('/api/v1/telecom/subscribers/<subscriber_id>/profile')
+async def subscriber_profile(request: Request, subscriber_id):
     """Subscriber profile - IDOR vulnerability"""
     record = telecom_subscribers_db.get(subscriber_id)
     if not record:
@@ -31,16 +32,16 @@ def subscriber_profile(subscriber_id):
         }
         telecom_subscribers_db[subscriber_id] = record
 
-    return jsonify({
+    return JSONResponse({
         'subscriber': record,
         'warning': 'Profile returned without authorization'
     })
 
 
-@telecom_bp.route('/api/v1/telecom/subscribers/<subscriber_id>/sim-swap', methods=['POST'])
-def sim_swap(subscriber_id):
+@telecom_router.route('/api/v1/telecom/subscribers/<subscriber_id>/sim-swap', methods=['POST'])
+async def sim_swap(request: Request, subscriber_id):
     """SIM swap - identity bypass vulnerability"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     swap_id = f"SIM-{uuid.uuid4().hex[:8]}"
     swap = {
         'swap_id': swap_id,
@@ -51,16 +52,16 @@ def sim_swap(subscriber_id):
         'created_at': datetime.now().isoformat()
     }
     telecom_sim_swaps_db[swap_id] = swap
-    return jsonify({
+    return JSONResponse({
         'swap': swap,
         'warning': 'SIM swap executed without verification'
-    }), 201
+    }, status_code=201)
 
 
-@telecom_bp.route('/api/v1/telecom/subscribers/<subscriber_id>/plan', methods=['PUT'])
-def plan_change(subscriber_id):
+@telecom_router.route('/api/v1/telecom/subscribers/<subscriber_id>/plan', methods=['PUT'])
+async def plan_change(request: Request, subscriber_id):
     """Plan change - pricing tamper vulnerability"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     plan_change_id = f"PLAN-{uuid.uuid4().hex[:8]}"
     record = {
         'plan_change_id': plan_change_id,
@@ -70,17 +71,17 @@ def plan_change(subscriber_id):
         'effective_at': datetime.now().isoformat()
     }
     telecom_plan_changes_db[plan_change_id] = record
-    return jsonify({
+    return JSONResponse({
         'plan_change': record,
         'warning': 'Plan updated without approval'
     })
 
 
-@telecom_bp.route('/api/v1/telecom/subscribers/export')
-def subscribers_export():
+@telecom_router.route('/api/v1/telecom/subscribers/export')
+async def subscribers_export(request: Request):
     """Subscriber export - data exfiltration"""
-    include_pii = request.args.get('include_pii', 'false').lower() == 'true'
-    limit = int(request.args.get('limit', 1000))
+    include_pii = request.query_params.get('include_pii', 'false').lower() == 'true'
+    limit = int(request.query_params.get('limit', 1000))
     subscribers = list(telecom_subscribers_db.values())[:limit]
     if not subscribers:
         subscribers = [
@@ -96,7 +97,7 @@ def subscribers_export():
         for subscriber in subscribers:
             subscriber.pop('msisdn', None)
 
-    return jsonify({
+    return JSONResponse({
         'subscribers': subscribers,
         'include_pii': include_pii,
         'warning': 'Subscriber export performed without authorization'
@@ -107,8 +108,8 @@ def subscribers_export():
 # NETWORK PROVISIONING & ACCESS
 # ============================================================================
 
-@telecom_bp.route('/api/v1/telecom/network/towers/<tower_id>')
-def tower_details(tower_id):
+@telecom_router.route('/api/v1/telecom/network/towers/<tower_id>')
+async def tower_details(request: Request, tower_id):
     """Tower access - IDOR vulnerability"""
     tower = telecom_network_towers_db.get(tower_id, {
         'tower_id': tower_id,
@@ -117,16 +118,16 @@ def tower_details(tower_id):
         'carrier': random.choice(['LTE', '5G'])
     })
     telecom_network_towers_db[tower_id] = tower
-    return jsonify({
+    return JSONResponse({
         'tower': tower,
         'warning': 'Tower details exposed without authorization'
     })
 
 
-@telecom_bp.route('/api/v1/telecom/network/provision', methods=['POST'])
-def network_provision():
+@telecom_router.route('/api/v1/telecom/network/provision', methods=['POST'])
+async def network_provision(request: Request):
     """Provisioning bypass - unauthorized activation"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     provision_id = f"PROV-{uuid.uuid4().hex[:8]}"
     record = {
         'provision_id': provision_id,
@@ -136,16 +137,16 @@ def network_provision():
         'created_at': datetime.now().isoformat()
     }
     telecom_provisioning_db[provision_id] = record
-    return jsonify({
+    return JSONResponse({
         'provisioning': record,
         'warning': 'Provisioning completed without approval'
-    }), 201
+    }, status_code=201)
 
 
-@telecom_bp.route('/api/v1/telecom/network/throttle', methods=['PUT'])
-def network_throttle():
+@telecom_router.route('/api/v1/telecom/network/throttle', methods=['PUT'])
+async def network_throttle(request: Request):
     """Throttle manipulation - policy override"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     throttle_id = f"THR-{uuid.uuid4().hex[:8]}"
     record = {
         'throttle_id': throttle_id,
@@ -155,24 +156,24 @@ def network_throttle():
         'updated_at': datetime.now().isoformat()
     }
     telecom_throttle_events_db[throttle_id] = record
-    return jsonify({
+    return JSONResponse({
         'throttle': record,
         'warning': 'Throttle updated without policy enforcement'
     })
 
 
-@telecom_bp.route('/api/v1/telecom/network/cdr/export')
-def cdr_export():
+@telecom_router.route('/api/v1/telecom/network/cdr/export')
+async def cdr_export(request: Request):
     """CDR export - data exposure"""
-    include_pii = request.args.get('include_pii', 'false').lower() == 'true'
-    limit = int(request.args.get('limit', 1000))
+    include_pii = request.query_params.get('include_pii', 'false').lower() == 'true'
+    limit = int(request.query_params.get('limit', 1000))
     export_id = f"CDR-{uuid.uuid4().hex[:8]}"
     telecom_cdr_exports_db[export_id] = {
         'export_id': export_id,
         'include_pii': include_pii,
         'created_at': datetime.now().isoformat()
     }
-    return jsonify({
+    return JSONResponse({
         'export_id': export_id,
         'records_exported': min(limit, 50),
         'include_pii': include_pii,
@@ -184,8 +185,8 @@ def cdr_export():
 # BILLING & USAGE
 # ============================================================================
 
-@telecom_bp.route('/api/v1/telecom/billing/invoices/<invoice_id>')
-def telecom_invoice(invoice_id):
+@telecom_router.route('/api/v1/telecom/billing/invoices/<invoice_id>')
+async def telecom_invoice(request: Request, invoice_id):
     """Invoice lookup - IDOR vulnerability"""
     invoice = telecom_invoices_db.get(invoice_id, {
         'invoice_id': invoice_id,
@@ -193,16 +194,16 @@ def telecom_invoice(invoice_id):
         'status': 'open'
     })
     telecom_invoices_db[invoice_id] = invoice
-    return jsonify({
+    return JSONResponse({
         'invoice': invoice,
         'warning': 'Invoice exposed without authorization'
     })
 
 
-@telecom_bp.route('/api/v1/telecom/billing/adjustments', methods=['PUT'])
-def billing_adjustments():
+@telecom_router.route('/api/v1/telecom/billing/adjustments', methods=['PUT'])
+async def billing_adjustments(request: Request):
     """Billing adjustment - tamper vulnerability"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     adjustment_id = f"ADJ-{uuid.uuid4().hex[:8]}"
     record = {
         'adjustment_id': adjustment_id,
@@ -212,16 +213,16 @@ def billing_adjustments():
         'created_at': datetime.now().isoformat()
     }
     telecom_billing_adjustments_db[adjustment_id] = record
-    return jsonify({
+    return JSONResponse({
         'adjustment': record,
         'warning': 'Billing adjustment applied without approval'
     })
 
 
-@telecom_bp.route('/api/v1/telecom/billing/payment-methods', methods=['POST'])
-def payment_methods():
+@telecom_router.route('/api/v1/telecom/billing/payment-methods', methods=['POST'])
+async def payment_methods(request: Request):
     """Payment method bypass - verification missing"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     method_id = f"PM-{uuid.uuid4().hex[:8]}"
     method = {
         'method_id': method_id,
@@ -230,16 +231,16 @@ def payment_methods():
         'skip_verification': data.get('skip_verification', False)
     }
     telecom_payment_methods_db[method_id] = method
-    return jsonify({
+    return JSONResponse({
         'payment_method': method,
         'warning': 'Payment method added without verification'
-    }), 201
+    }, status_code=201)
 
 
-@telecom_bp.route('/api/v1/telecom/billing/refunds', methods=['POST'])
-def billing_refund():
+@telecom_router.route('/api/v1/telecom/billing/refunds', methods=['POST'])
+async def billing_refund(request: Request):
     """Refund abuse - bypass controls"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     refund_id = f"REF-{uuid.uuid4().hex[:8]}"
     refund = {
         'refund_id': refund_id,
@@ -248,20 +249,20 @@ def billing_refund():
         'force_refund': data.get('force_refund', False)
     }
     telecom_refunds_db[refund_id] = refund
-    return jsonify({
+    return JSONResponse({
         'refund': refund,
         'warning': 'Refund processed without authorization'
-    }), 201
+    }, status_code=201)
 
 
 # ============================================================================
 # DEVICE INTEGRITY & ROAMING
 # ============================================================================
 
-@telecom_bp.route('/api/v1/telecom/devices/bind', methods=['POST'])
-def device_bind():
+@telecom_router.route('/api/v1/telecom/devices/bind', methods=['POST'])
+async def device_bind(request: Request):
     """Device binding - SIM swap bypass"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     binding_id = f"BIND-{uuid.uuid4().hex[:8]}"
     record = {
         'binding_id': binding_id,
@@ -272,16 +273,16 @@ def device_bind():
         'bound_at': datetime.now().isoformat()
     }
     telecom_device_bindings_db[binding_id] = record
-    return jsonify({
+    return JSONResponse({
         'binding': record,
         'warning': 'Device binding completed without verification'
-    }), 201
+    }, status_code=201)
 
 
-@telecom_bp.route('/api/v1/telecom/imei/blacklist', methods=['PUT'])
-def imei_blacklist():
+@telecom_router.route('/api/v1/telecom/imei/blacklist', methods=['PUT'])
+async def imei_blacklist(request: Request):
     """IMEI blacklist override"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     imei = data.get('imei', f'IMEI-{uuid.uuid4().hex[:6]}')
     record = {
         'imei': imei,
@@ -290,16 +291,16 @@ def imei_blacklist():
         'updated_at': datetime.now().isoformat()
     }
     telecom_imei_blacklist_db[imei] = record
-    return jsonify({
+    return JSONResponse({
         'imei_record': record,
         'warning': 'IMEI blacklist updated without authorization'
     })
 
 
-@telecom_bp.route('/api/v1/telecom/roaming/override', methods=['POST'])
-def roaming_override():
+@telecom_router.route('/api/v1/telecom/roaming/override', methods=['POST'])
+async def roaming_override(request: Request):
     """Roaming override - policy bypass"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     override_id = f"ROAM-{uuid.uuid4().hex[:8]}"
     record = {
         'override_id': override_id,
@@ -309,20 +310,20 @@ def roaming_override():
         'created_at': datetime.now().isoformat()
     }
     telecom_roaming_overrides_db[override_id] = record
-    return jsonify({
+    return JSONResponse({
         'override': record,
         'warning': 'Roaming override applied without approval'
-    }), 201
+    }, status_code=201)
 
 
 # ============================================================================
 # NUMBER PORTING & SIM INTEGRITY
 # ============================================================================
 
-@telecom_bp.route('/api/v1/telecom/porting/requests', methods=['POST'])
-def porting_request():
+@telecom_router.route('/api/v1/telecom/porting/requests', methods=['POST'])
+async def porting_request(request: Request):
     """Port-out request - bypass PIN"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     request_id = f"PORT-{uuid.uuid4().hex[:8]}"
     record = {
         'request_id': request_id,
@@ -331,26 +332,26 @@ def porting_request():
         'status': 'submitted'
     }
     telecom_porting_requests_db[request_id] = record
-    return jsonify({
+    return JSONResponse({
         'request': record,
         'warning': 'Porting request accepted without PIN validation'
-    }), 201
+    }, status_code=201)
 
 
-@telecom_bp.route('/api/v1/telecom/porting/requests/<request_id>')
-def porting_status(request_id):
+@telecom_router.route('/api/v1/telecom/porting/requests/<request_id>')
+async def porting_status(request: Request, request_id):
     """Porting status - IDOR"""
     record = telecom_porting_requests_db.get(request_id, {'request_id': request_id, 'status': 'pending'})
-    return jsonify({
+    return JSONResponse({
         'request': record,
         'warning': 'Porting status exposed without authorization'
     })
 
 
-@telecom_bp.route('/api/v1/telecom/porting/swap', methods=['PUT'])
-def porting_swap():
+@telecom_router.route('/api/v1/telecom/porting/swap', methods=['PUT'])
+async def porting_swap(request: Request):
     """Number swap - tamper vulnerability"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     swap_id = f"SWAP-{uuid.uuid4().hex[:8]}"
     record = {
         'swap_id': swap_id,
@@ -359,17 +360,17 @@ def porting_swap():
         'override_checks': data.get('override_checks', False)
     }
     telecom_porting_requests_db[swap_id] = record
-    return jsonify({
+    return JSONResponse({
         'swap': record,
         'warning': 'Number swap completed without checks'
     })
 
 
-@telecom_bp.route('/api/v1/telecom/porting/export')
-def porting_export():
+@telecom_router.route('/api/v1/telecom/porting/export')
+async def porting_export(request: Request):
     """Porting export - data exposure"""
-    include_pii = request.args.get('include_pii', 'false').lower() == 'true'
-    return jsonify({
+    include_pii = request.query_params.get('include_pii', 'false').lower() == 'true'
+    return JSONResponse({
         'requests': list(telecom_porting_requests_db.values()),
         'include_pii': include_pii,
         'warning': 'Porting data exported without authorization'
@@ -380,10 +381,10 @@ def porting_export():
 # INTEGRATIONS & API ACCESS
 # ============================================================================
 
-@telecom_bp.route('/api/v1/telecom/api-keys/export')
-def api_keys_export():
+@telecom_router.route('/api/v1/telecom/api-keys/export')
+async def api_keys_export(request: Request):
     """API key export - secret exposure"""
-    include_secrets = request.args.get('include_secrets', 'false').lower() == 'true'
+    include_secrets = request.query_params.get('include_secrets', 'false').lower() == 'true'
     keys = [
         {
             'key_id': key.get('key_id'),
@@ -392,17 +393,17 @@ def api_keys_export():
         }
         for key in telecom_api_keys_db.values()
     ]
-    return jsonify({
+    return JSONResponse({
         'keys': keys,
         'include_secrets': include_secrets,
         'warning': 'API keys exported without authorization'
     })
 
 
-@telecom_bp.route('/api/v1/telecom/integrations/webhooks', methods=['POST'])
-def telecom_webhook_register():
+@telecom_router.route('/api/v1/telecom/integrations/webhooks', methods=['POST'])
+async def telecom_webhook_register(request: Request):
     """Webhook registration - SSRF risk"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     hook_id = f"HOOK-{uuid.uuid4().hex[:8]}"
     telecom_webhooks_db[hook_id] = {
         'hook_id': hook_id,
@@ -410,39 +411,39 @@ def telecom_webhook_register():
         'events': data.get('events', []),
         'bypass_validation': data.get('bypass_validation', False)
     }
-    return jsonify({
+    return JSONResponse({
         'hook_id': hook_id,
         'warning': 'Webhook registered without validation'
-    }), 201
+    }, status_code=201)
 
 
-@telecom_bp.route('/api/v1/telecom/integrations/cdr/stream', methods=['POST'])
-def cdr_stream():
+@telecom_router.route('/api/v1/telecom/integrations/cdr/stream', methods=['POST'])
+async def cdr_stream(request: Request):
     """CDR stream - replay/bypass risk"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     stream_id = data.get('stream_id', f"stream-{uuid.uuid4().hex[:6]}")
     telecom_cdr_streams_db[stream_id] = {
         'stream_id': stream_id,
         'force_enable': data.get('force_enable', False),
         'enabled_at': datetime.now().isoformat()
     }
-    return jsonify({
+    return JSONResponse({
         'stream_id': stream_id,
         'warning': 'CDR stream enabled without authorization'
     })
 
 
-@telecom_bp.route('/api/v1/telecom/integrations/device-activate', methods=['POST'])
-def device_activate():
+@telecom_router.route('/api/v1/telecom/integrations/device-activate', methods=['POST'])
+async def device_activate(request: Request):
     """Device activation - bypass controls"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     device_id = data.get('device_id')
     telecom_device_activations_db[device_id] = {
         'device_id': device_id,
         'override_checks': data.get('override_checks', False),
         'activated_at': datetime.now().isoformat()
     }
-    return jsonify({
+    return JSONResponse({
         'device_id': device_id,
         'warning': 'Device activated without verification'
-    }), 201
+    }, status_code=201)

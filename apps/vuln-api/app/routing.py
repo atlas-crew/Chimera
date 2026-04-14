@@ -6,8 +6,11 @@ Flask-style @router.route('/path') decorators. This shim bridges the gap
 so 486 route registrations don't need manual conversion to declarative style.
 """
 
+import inspect
 import re
+from functools import wraps
 
+from starlette.requests import Request
 from starlette.routing import Route, Router as _StarletteRouter
 
 _PATH_PARAM_RE = re.compile(r"<(?:(?P<converter>[a-zA-Z_][a-zA-Z0-9_]*):)?(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)>")
@@ -42,7 +45,17 @@ class DecoratorRouter(_StarletteRouter):
         normalized_path = self._normalize_path(path)
 
         def decorator(func):
-            self.routes.append(Route(normalized_path, func, methods=methods, **kwargs))
+            @wraps(func)
+            async def endpoint(request):
+                result = func(request, **request.path_params)
+                if inspect.isawaitable(result):
+                    result = await result
+                return result
+
+            self.routes.append(Route(normalized_path, endpoint, methods=methods, **kwargs))
+            # Preserve Flask/Werkzeug-like specificity so static paths
+            # continue to win over dynamic wildcards after codemod.
+            self.routes.sort(key=lambda route: (getattr(route, "path", "").count("{"), -len(getattr(route, "path", ""))))
             return func
         return decorator
 
@@ -60,3 +73,15 @@ class DecoratorRouter(_StarletteRouter):
 
     def patch(self, path: str, **kwargs):
         return self.route(path, methods=['PATCH'], **kwargs)
+
+
+async def get_json_or_default(request: Request, default=None):
+    """Mirror Flask's lenient JSON parsing for migrated Starlette handlers."""
+    try:
+        data = await request.json()
+    except Exception:
+        return {} if default is None else default
+
+    if data is None:
+        return {} if default is None else default
+    return data

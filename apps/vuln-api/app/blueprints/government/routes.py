@@ -2,22 +2,23 @@
 Routes for government endpoints.
 Demonstrates citizen services, identity access, and mission data integrity vulnerabilities.
 """
-
-from flask import request, jsonify
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from datetime import datetime, timedelta
 import uuid
 import random
 
-from . import government_bp
+from . import government_router
 from app.models import *
+from app.routing import get_json_or_default
 
 
 # ============================================================================
 # CITIZEN SERVICES & CASEWORK
 # ============================================================================
 
-@government_bp.route('/api/v1/gov/cases/<case_id>')
-def get_case_details(case_id):
+@government_router.route('/api/v1/gov/cases/<case_id>')
+async def get_case_details(request: Request, case_id):
     """Get case details - IDOR vulnerability"""
     # Vulnerability: No authorization check for case ownership
     case = gov_cases_db.get(case_id)
@@ -34,7 +35,7 @@ def get_case_details(case_id):
         }
         gov_cases_db[case_id] = case
 
-    return jsonify({
+    return JSONResponse({
         'case_id': case['case_id'],
         'citizen_id': case['citizen_id'],
         'program': case['program'],
@@ -46,16 +47,16 @@ def get_case_details(case_id):
     })
 
 
-@government_bp.route('/api/v1/gov/benefits/search')
-def benefits_search():
+@government_router.route('/api/v1/gov/benefits/search')
+async def benefits_search(request: Request):
     """Benefits search - SQL injection vulnerability"""
-    query = request.args.get('q', '')
-    program = request.args.get('program', '')
+    query = request.query_params.get('q', '')
+    program = request.query_params.get('program', '')
 
     sql_query = f"SELECT * FROM benefits WHERE program='{program}' AND applicant LIKE '%{query}%'"
 
     if any(token in query.lower() for token in ['union', 'select', 'drop', '--', ';']):
-        return jsonify({
+        return JSONResponse({
             'vulnerability': 'SQL_INJECTION_DETECTED',
             'query': sql_query,
             'message': 'Query bypassed input validation',
@@ -74,33 +75,33 @@ def benefits_search():
             continue
         results.append(application)
 
-    return jsonify({
+    return JSONResponse({
         'results': results,
         'count': len(results),
         'sql_query': sql_query
     })
 
 
-@government_bp.route('/api/v1/gov/benefits/<application_id>/eligibility', methods=['PUT'])
-def benefits_eligibility_override(application_id):
+@government_router.route('/api/v1/gov/benefits/<application_id>/eligibility', methods=['PUT'])
+async def benefits_eligibility_override(request: Request, application_id):
     """Eligibility override - bypass controls"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     application = gov_benefits_applications_db.get(application_id, {'application_id': application_id})
     application['eligible'] = data.get('eligible', True)
     application['override_checks'] = data.get('override_checks', False)
     application['updated_at'] = datetime.now().isoformat()
     gov_benefits_applications_db[application_id] = application
 
-    return jsonify({
+    return JSONResponse({
         'application': application,
         'warning': 'Eligibility updated without validation'
     })
 
 
-@government_bp.route('/api/v1/gov/service-requests', methods=['POST'])
-def service_request_submit():
+@government_router.route('/api/v1/gov/service-requests', methods=['POST'])
+async def service_request_submit(request: Request):
     """Submit service request - tampering vulnerability"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     request_id = f"SR-{uuid.uuid4().hex[:8]}"
 
     priority = data.get('priority', 'normal')
@@ -120,18 +121,18 @@ def service_request_submit():
 
     gov_service_requests_db[request_id] = service_request
 
-    return jsonify({
+    return JSONResponse({
         'status': 'received',
         'service_request': service_request,
         'warning': 'Priority set without validation checks'
-    }), 201
+    }, status_code=201)
 
 
-@government_bp.route('/api/v1/gov/records/export')
-def records_export():
+@government_router.route('/api/v1/gov/records/export')
+async def records_export(request: Request):
     """Export public records - data exfiltration"""
-    limit = int(request.args.get('limit', 100))
-    include_sensitive = request.args.get('include_sensitive', 'false').lower() == 'true'
+    limit = int(request.query_params.get('limit', 100))
+    include_sensitive = request.query_params.get('include_sensitive', 'false').lower() == 'true'
 
     records = list(gov_records_db.values())
     exported = []
@@ -143,7 +144,7 @@ def records_export():
             payload.pop('address', None)
         exported.append(payload)
 
-    return jsonify({
+    return JSONResponse({
         'export_id': f'EXP-{uuid.uuid4().hex[:8]}',
         'records': exported,
         'total_records': len(records),
@@ -152,10 +153,10 @@ def records_export():
     })
 
 
-@government_bp.route('/api/v1/gov/cases/<case_id>/status', methods=['PUT'])
-def update_case_status(case_id):
+@government_router.route('/api/v1/gov/cases/<case_id>/status', methods=['PUT'])
+async def update_case_status(request: Request, case_id):
     """Update case status - manipulation vulnerability"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     new_status = data.get('status', 'pending')
     override_checks = data.get('override_checks', False)
 
@@ -175,7 +176,7 @@ def update_case_status(case_id):
     case['status'] = new_status
     case['last_updated'] = datetime.now().isoformat()
 
-    return jsonify({
+    return JSONResponse({
         'case_id': case_id,
         'previous_status': old_status,
         'new_status': new_status,
@@ -184,10 +185,10 @@ def update_case_status(case_id):
     })
 
 
-@government_bp.route('/api/v1/gov/cases/<case_id>/reassign', methods=['PUT'])
-def reassign_case(case_id):
+@government_router.route('/api/v1/gov/cases/<case_id>/reassign', methods=['PUT'])
+async def reassign_case(request: Request, case_id):
     """Case reassignment - bypass workflow"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     case = gov_cases_db.get(case_id, {'case_id': case_id})
     previous_agent = case.get('assigned_agent')
     case['assigned_agent'] = data.get('assigned_agent', f'AGT-{random.randint(100, 999)}')
@@ -195,7 +196,7 @@ def reassign_case(case_id):
     case['last_updated'] = datetime.now().isoformat()
     gov_cases_db[case_id] = case
 
-    return jsonify({
+    return JSONResponse({
         'case_id': case_id,
         'previous_agent': previous_agent,
         'new_agent': case['assigned_agent'],
@@ -207,8 +208,8 @@ def reassign_case(case_id):
 # IDENTITY & ACCESS CONTROL
 # ============================================================================
 
-@government_bp.route('/api/v1/gov/identity/cards/<card_id>')
-def access_card_details(card_id):
+@government_router.route('/api/v1/gov/identity/cards/<card_id>')
+async def access_card_details(request: Request, card_id):
     """Access card details - IDOR vulnerability"""
     card = gov_access_cards_db.get(card_id)
     if not card:
@@ -220,7 +221,7 @@ def access_card_details(card_id):
         }
         gov_access_cards_db[card_id] = card
 
-    return jsonify({
+    return JSONResponse({
         'card_id': card['card_id'],
         'holder': card['holder'],
         'clearance': card['clearance'],
@@ -229,10 +230,10 @@ def access_card_details(card_id):
     })
 
 
-@government_bp.route('/api/v1/gov/users/<user_id>/roles', methods=['PUT'])
-def update_user_role(user_id):
+@government_router.route('/api/v1/gov/users/<user_id>/roles', methods=['PUT'])
+async def update_user_role(request: Request, user_id):
     """Update user roles - privilege escalation"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     role = data.get('role', 'user')
     skip_approval = data.get('skip_approval', False)
 
@@ -241,7 +242,7 @@ def update_user_role(user_id):
     user['role'] = role
     gov_users_db[user_id] = user
 
-    return jsonify({
+    return JSONResponse({
         'user_id': user_id,
         'previous_role': old_role,
         'new_role': role,
@@ -250,38 +251,38 @@ def update_user_role(user_id):
     })
 
 
-@government_bp.route('/api/v1/gov/auth/mfa/verify', methods=['POST'])
-def mfa_verify():
+@government_router.route('/api/v1/gov/auth/mfa/verify', methods=['POST'])
+async def mfa_verify(request: Request):
     """MFA verification - bypass vulnerability"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     code = data.get('code', '')
     bypass = data.get('bypass', False)
 
     if code == '000000' or bypass:
-        return jsonify({
+        return JSONResponse({
             'status': 'verified',
             'bypass_used': True,
             'message': 'MFA bypass accepted'
         })
 
-    return jsonify({
+    return JSONResponse({
         'status': 'verified',
         'bypass_used': False,
         'message': 'MFA verification successful'
     })
 
 
-@government_bp.route('/api/v1/gov/auth/sso/callback', methods=['POST'])
-def sso_callback():
+@government_router.route('/api/v1/gov/auth/sso/callback', methods=['POST'])
+async def sso_callback(request: Request):
     """Federated login callback - assertion tampering"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     assertion = data.get('assertion', '')
     force_admin = data.get('force_admin', False)
 
     is_tampered = 'tampered' in assertion or force_admin
     role = 'admin' if is_tampered else 'user'
 
-    return jsonify({
+    return JSONResponse({
         'status': 'authenticated',
         'role': role,
         'assertion_validated': not is_tampered,
@@ -289,13 +290,13 @@ def sso_callback():
     })
 
 
-@government_bp.route('/api/v1/gov/identity/credentials/export')
-def credentials_export():
+@government_router.route('/api/v1/gov/identity/credentials/export')
+async def credentials_export(request: Request):
     """Export identity credentials - sensitive data exposure"""
-    limit = int(request.args.get('limit', 100))
+    limit = int(request.query_params.get('limit', 100))
     credentials = list(gov_credentials_db.values())[:limit]
 
-    return jsonify({
+    return JSONResponse({
         'exported': credentials,
         'count': len(credentials),
         'warning': 'Credential export performed without authorization'
@@ -306,12 +307,12 @@ def credentials_export():
 # MISSION DATA INTEGRITY
 # ============================================================================
 
-@government_bp.route('/api/v1/gov/audit-logs/<log_id>', methods=['DELETE'])
-def delete_audit_log(log_id):
+@government_router.route('/api/v1/gov/audit-logs/<log_id>', methods=['DELETE'])
+async def delete_audit_log(request: Request, log_id):
     """Audit log deletion - tampering vulnerability"""
     deleted = gov_audit_logs_db.pop(log_id, None)
 
-    return jsonify({
+    return JSONResponse({
         'log_id': log_id,
         'deleted': True,
         'previous_entry': deleted,
@@ -319,32 +320,32 @@ def delete_audit_log(log_id):
     })
 
 
-@government_bp.route('/api/v1/gov/records/bulk-export')
-def records_bulk_export():
+@government_router.route('/api/v1/gov/records/bulk-export')
+async def records_bulk_export(request: Request):
     """Bulk export records - data exfiltration"""
-    format_type = request.args.get('format', 'json')
-    limit = int(request.args.get('limit', 1000))
+    format_type = request.query_params.get('format', 'json')
+    limit = int(request.query_params.get('limit', 1000))
 
     records = list(gov_records_db.values())[:limit]
 
     if format_type == 'sql_dump':
-        return jsonify({
+        return JSONResponse({
             'format': format_type,
             'dump': f"INSERT INTO records VALUES ({len(records)} rows);",
             'records_exported': len(records)
         })
 
-    return jsonify({
+    return JSONResponse({
         'format': format_type,
         'records': records,
         'records_exported': len(records)
     })
 
 
-@government_bp.route('/api/v1/gov/data/classify', methods=['POST'])
-def classify_record():
+@government_router.route('/api/v1/gov/data/classify', methods=['POST'])
+async def classify_record(request: Request):
     """Classification override - access control bypass"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     record_id = data.get('record_id')
     classification = data.get('classification', 'public')
     override_controls = data.get('override_controls', False)
@@ -356,7 +357,7 @@ def classify_record():
     if record:
         record['classification'] = classification
 
-    return jsonify({
+    return JSONResponse({
         'record_id': record_id,
         'previous_classification': current,
         'new_classification': classification,
@@ -364,14 +365,14 @@ def classify_record():
     })
 
 
-@government_bp.route('/api/v1/gov/cases/history')
-def case_history_search():
+@government_router.route('/api/v1/gov/cases/history')
+async def case_history_search(request: Request):
     """Case history search - SQL injection vulnerability"""
-    case_id = request.args.get('case_id', '')
+    case_id = request.query_params.get('case_id', '')
     sql_query = f"SELECT * FROM cases WHERE case_id = '{case_id}'"
 
     if any(token in case_id.lower() for token in ['union', 'select', '--', ';']):
-        return jsonify({
+        return JSONResponse({
             'vulnerability': 'SQL_INJECTION_DETECTED',
             'query': sql_query,
             'exposed_tables': ['cases', 'citizens', 'audit_logs'],
@@ -387,17 +388,17 @@ def case_history_search():
             'updated_at': case.get('last_updated')
         })
 
-    return jsonify({
+    return JSONResponse({
         'case_id': case_id,
         'history': history,
         'sql_query': sql_query
     })
 
 
-@government_bp.route('/api/v1/gov/records/<record_id>', methods=['PUT'])
-def update_record(record_id):
+@government_router.route('/api/v1/gov/records/<record_id>', methods=['PUT'])
+async def update_record(request: Request, record_id):
     """Update record - data tampering vulnerability"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     bypass_audit = data.get('bypass_audit', False)
 
     record = gov_records_db.get(record_id, {
@@ -416,7 +417,7 @@ def update_record(record_id):
 
     gov_records_db[record_id] = record
 
-    return jsonify({
+    return JSONResponse({
         'record': record,
         'bypass_audit': bypass_audit,
         'warning': 'Record updated without audit trail enforcement'
@@ -427,10 +428,10 @@ def update_record(record_id):
 # LICENSING & PERMITS
 # ============================================================================
 
-@government_bp.route('/api/v1/gov/permits/apply', methods=['POST'])
-def apply_permit():
+@government_router.route('/api/v1/gov/permits/apply', methods=['POST'])
+async def apply_permit(request: Request):
     """Permit application - validation bypass"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     permit_id = f"PERM-{uuid.uuid4().hex[:8]}"
 
     permit = {
@@ -443,14 +444,14 @@ def apply_permit():
     }
     gov_permits_db[permit_id] = permit
 
-    return jsonify({
+    return JSONResponse({
         'permit': permit,
         'warning': 'Permit accepted without validation checks'
-    }), 201
+    }, status_code=201)
 
 
-@government_bp.route('/api/v1/gov/licenses/<license_id>')
-def get_license(license_id):
+@government_router.route('/api/v1/gov/licenses/<license_id>')
+async def get_license(request: Request, license_id):
     """License lookup - IDOR vulnerability"""
     license_record = gov_licenses_db.get(license_id)
     if not license_record:
@@ -463,24 +464,24 @@ def get_license(license_id):
         }
         gov_licenses_db[license_id] = license_record
 
-    return jsonify({
+    return JSONResponse({
         'license': license_record,
         'warning': 'License data exposed without access control'
     })
 
 
-@government_bp.route('/api/v1/gov/licenses/export')
-def licenses_export():
+@government_router.route('/api/v1/gov/licenses/export')
+async def licenses_export(request: Request):
     """License export - data exfiltration"""
-    include_pii = request.args.get('include_pii', 'false').lower() == 'true'
-    limit = int(request.args.get('limit', 1000))
+    include_pii = request.query_params.get('include_pii', 'false').lower() == 'true'
+    limit = int(request.query_params.get('limit', 1000))
     licenses = list(gov_licenses_db.values())[:limit]
 
     if include_pii:
         for entry in licenses:
             entry.setdefault('ssn', f'{random.randint(100,999)}-{random.randint(10,99)}-{random.randint(1000,9999)}')
 
-    return jsonify({
+    return JSONResponse({
         'licenses': licenses,
         'include_pii': include_pii,
         'count': len(licenses),
@@ -488,17 +489,17 @@ def licenses_export():
     })
 
 
-@government_bp.route('/api/v1/gov/permits/<permit_id>/approve', methods=['PUT'])
-def approve_permit(permit_id):
+@government_router.route('/api/v1/gov/permits/<permit_id>/approve', methods=['PUT'])
+async def approve_permit(request: Request, permit_id):
     """Permit approval - override vulnerability"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     permit = gov_permits_db.get(permit_id, {'permit_id': permit_id})
     permit['status'] = 'approved' if data.get('approved', True) else 'denied'
     permit['override_checks'] = data.get('override_checks', False)
     permit['updated_at'] = datetime.now().isoformat()
     gov_permits_db[permit_id] = permit
 
-    return jsonify({
+    return JSONResponse({
         'permit': permit,
         'warning': 'Permit approval applied without review'
     })
@@ -508,10 +509,10 @@ def approve_permit(permit_id):
 # GRANTS & ASSISTANCE PROGRAMS
 # ============================================================================
 
-@government_bp.route('/api/v1/gov/grants/apply', methods=['POST'])
-def apply_grant():
+@government_router.route('/api/v1/gov/grants/apply', methods=['POST'])
+async def apply_grant(request: Request):
     """Grant application - injection and bypass risks"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     grant_id = f"GRANT-{uuid.uuid4().hex[:8]}"
 
     grant = {
@@ -524,16 +525,16 @@ def apply_grant():
     }
     gov_grants_db[grant_id] = grant
 
-    return jsonify({
+    return JSONResponse({
         'grant': grant,
         'warning': 'Grant accepted without eligibility validation'
-    }), 201
+    }, status_code=201)
 
 
-@government_bp.route('/api/v1/gov/grants/<grant_id>/award', methods=['PUT'])
-def award_grant(grant_id):
+@government_router.route('/api/v1/gov/grants/<grant_id>/award', methods=['PUT'])
+async def award_grant(request: Request, grant_id):
     """Grant award manipulation"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     grant = gov_grants_db.get(grant_id, {'grant_id': grant_id})
     grant['award_amount'] = data.get('award_amount', 0)
     grant['bypass_review'] = data.get('bypass_review', False)
@@ -541,16 +542,16 @@ def award_grant(grant_id):
     grant['awarded_at'] = datetime.now().isoformat()
     gov_grants_db[grant_id] = grant
 
-    return jsonify({
+    return JSONResponse({
         'grant': grant,
         'warning': 'Award updated without review workflow'
     })
 
 
-@government_bp.route('/api/v1/gov/grants/disburse', methods=['POST'])
-def disburse_grant():
+@government_router.route('/api/v1/gov/grants/disburse', methods=['POST'])
+async def disburse_grant(request: Request):
     """Grant disbursement - bypass controls"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     disbursement = {
         'grant_id': data.get('grant_id'),
         'account': data.get('account', 'acct-unknown'),
@@ -559,20 +560,20 @@ def disburse_grant():
         'disbursed_at': datetime.now().isoformat()
     }
 
-    return jsonify({
+    return JSONResponse({
         'disbursement': disbursement,
         'warning': 'Disbursement executed without approval'
-    }), 201
+    }, status_code=201)
 
 
 # ============================================================================
 # PUBLIC RECORDS & FOIA
 # ============================================================================
 
-@government_bp.route('/api/v1/gov/foia/requests', methods=['POST'])
-def create_foia_request():
+@government_router.route('/api/v1/gov/foia/requests', methods=['POST'])
+async def create_foia_request(request: Request):
     """FOIA request submission"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     request_id = f"FOIA-{uuid.uuid4().hex[:8]}"
 
     request_record = {
@@ -585,17 +586,17 @@ def create_foia_request():
     }
     gov_foia_requests_db[request_id] = request_record
 
-    return jsonify({
+    return JSONResponse({
         'request': request_record,
         'warning': 'FOIA request accepted without validation'
-    }), 201
+    }, status_code=201)
 
 
-@government_bp.route('/api/v1/gov/foia/export')
-def export_foia_records():
+@government_router.route('/api/v1/gov/foia/export')
+async def export_foia_records(request: Request):
     """FOIA export - data exfiltration"""
-    include_sensitive = request.args.get('include_sensitive', 'false').lower() == 'true'
-    limit = int(request.args.get('limit', 1000))
+    include_sensitive = request.query_params.get('include_sensitive', 'false').lower() == 'true'
+    limit = int(request.query_params.get('limit', 1000))
     records = list(gov_records_db.values())[:limit]
 
     exported = []
@@ -606,24 +607,24 @@ def export_foia_records():
             payload.pop('address', None)
         exported.append(payload)
 
-    return jsonify({
+    return JSONResponse({
         'records': exported,
         'include_sensitive': include_sensitive,
         'count': len(exported)
     })
 
 
-@government_bp.route('/api/v1/gov/foia/requests/<request_id>/status', methods=['PUT'])
-def update_foia_status(request_id):
+@government_router.route('/api/v1/gov/foia/requests/<request_id>/status', methods=['PUT'])
+async def update_foia_status(request: Request, request_id):
     """FOIA status update - bypass controls"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     request_record = gov_foia_requests_db.get(request_id, {'request_id': request_id})
     request_record['status'] = data.get('status', 'approved')
     request_record['override_checks'] = data.get('override_checks', False)
     request_record['updated_at'] = datetime.now().isoformat()
     gov_foia_requests_db[request_id] = request_record
 
-    return jsonify({
+    return JSONResponse({
         'request': request_record,
         'warning': 'FOIA status updated without review'
     })
@@ -633,10 +634,10 @@ def update_foia_status(request_id):
 # EMERGENCY ALERTS & BROADCASTS
 # ============================================================================
 
-@government_bp.route('/api/v1/gov/alerts/broadcast', methods=['POST'])
-def alert_broadcast():
+@government_router.route('/api/v1/gov/alerts/broadcast', methods=['POST'])
+async def alert_broadcast(request: Request):
     """Alert broadcast - unauthorized broadcast"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     alert_id = f"ALERT-{uuid.uuid4().hex[:8]}"
 
     alert = {
@@ -648,16 +649,16 @@ def alert_broadcast():
     }
     gov_alerts_db[alert_id] = alert
 
-    return jsonify({
+    return JSONResponse({
         'alert': alert,
         'warning': 'Alert broadcast without authorization'
-    }), 201
+    }, status_code=201)
 
 
-@government_bp.route('/api/v1/gov/alerts/<alert_id>/suppress', methods=['PUT'])
-def alert_suppress(alert_id):
+@government_router.route('/api/v1/gov/alerts/<alert_id>/suppress', methods=['PUT'])
+async def alert_suppress(request: Request, alert_id):
     """Suppress alert - tampering vulnerability"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     alert = gov_alerts_db.get(alert_id, {'alert_id': alert_id})
     alert['suppressed'] = True
     alert['reason'] = data.get('reason', 'maintenance')
@@ -665,19 +666,19 @@ def alert_suppress(alert_id):
     alert['suppressed_at'] = datetime.now().isoformat()
     gov_alerts_db[alert_id] = alert
 
-    return jsonify({
+    return JSONResponse({
         'alert': alert,
         'warning': 'Alert suppressed without authorization'
     })
 
 
-@government_bp.route('/api/v1/gov/alerts/target')
-def alert_geo_target():
+@government_router.route('/api/v1/gov/alerts/target')
+async def alert_geo_target(request: Request):
     """Targeted alerts - override limits"""
-    region = request.args.get('region', 'all')
-    override_limits = request.args.get('override_limits', 'false').lower() == 'true'
+    region = request.query_params.get('region', 'all')
+    override_limits = request.query_params.get('override_limits', 'false').lower() == 'true'
 
-    return jsonify({
+    return JSONResponse({
         'region': region,
         'override_limits': override_limits,
         'warning': 'Geo targeting executed without validation'

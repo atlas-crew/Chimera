@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - codex
 created_date: '2026-04-12 04:06'
-updated_date: '2026-04-14 14:37'
+updated_date: '2026-04-14 15:35'
 labels:
   - refactor
 dependencies: []
@@ -65,4 +65,6 @@ FastAPI's automatic Pydantic validation would silently block SQL injection paylo
 Work started by Codex on 2026-04-14 after live inspection of the current ASGI skeleton, remaining Flask blueprints, and migration support tooling.
 
 Completed the first migration loop around app/utils/hotpatch.py and supporting routing/codemod infrastructure. Remaining work is still concentrated in bulk blueprint conversion, middleware/error plumbing, test-client migration, and infra cutover.
+
+Completed first Tier 2 Starlette migration slice: government, telecom, and energy_utilities now run under app/asgi.py with ASGI test fixtures and focused passing validation (36 targeted tests). Routing shim now forwards path params, preserves static-over-dynamic precedence, and provides lenient JSON parsing for migrated handlers.
 <!-- SECTION:NOTES:END -->

@@ -1,9 +1,8 @@
 """
 Energy utilities blueprint.
 """
+from app.routing import DecoratorRouter as Router
 
-from flask import Blueprint
-
-energy_utilities_bp = Blueprint('energy_utilities', __name__)
+energy_utilities_router = Router(routes=[])
 
 from . import routes
