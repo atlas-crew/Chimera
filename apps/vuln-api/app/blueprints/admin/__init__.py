@@ -1,9 +1,8 @@
 """
 Admin blueprint.
 """
+from app.routing import DecoratorRouter as Router
 
-from flask import Blueprint
-
-admin_bp = Blueprint('admin', __name__)
+admin_router = Router(routes=[])
 
 from . import routes

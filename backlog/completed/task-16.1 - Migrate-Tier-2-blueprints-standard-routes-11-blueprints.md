@@ -1,11 +1,11 @@
 ---
 id: TASK-16.1
 title: 'Migrate Tier 2 blueprints (standard routes, 11 blueprints)'
-status: In Progress
+status: Done
 assignee:
   - codex
 created_date: '2026-04-12 04:07'
-updated_date: '2026-04-14 23:50'
+updated_date: '2026-04-15 00:16'
 labels:
   - refactor
 dependencies: []
@@ -51,13 +51,13 @@ Run the flask_to_starlette.py codemod on 11 Tier 2 blueprints and wire them into
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 All 11 Tier 2 blueprints transformed by codemod
-- [ ] #2 DecoratorRouter used in all Tier 2 __init__.py files
-- [ ] #3 Routes mounted in app/asgi.py
-- [ ] #4 Flask factory no longer imports Tier 2 blueprints
-- [ ] #5 genai request.files manually migrated to Starlette form API
-- [ ] #6 Flask test suite passes (632 tests, allowing for Tier 1+2 shims)
-- [ ] #7 Smoke test confirms representative endpoint from each blueprint works on uvicorn
+- [x] #1 All 11 Tier 2 blueprints transformed by codemod
+- [x] #2 DecoratorRouter used in all Tier 2 __init__.py files
+- [x] #3 Routes mounted in app/asgi.py
+- [x] #4 Flask factory no longer imports Tier 2 blueprints
+- [x] #5 genai request.files manually migrated to Starlette form API
+- [x] #6 Flask test suite passes (632 tests, allowing for Tier 1+2 shims)
+- [x] #7 Smoke test confirms representative endpoint from each blueprint works on uvicorn
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -119,4 +119,20 @@ Added focused coverage in tests/unit/test_attack_sim_routes.py and expanded test
 Source review artifact: .agents/reviews/review-20260414-194453.md (PASS WITH ISSUES). Main note is that the migration intentionally turns the eight dead endpoints into real JSON responses and that downstream consumers should use the new payloads instead of empty bodies.
 
 Test audit artifact: .agents/reviews/test-audit-20260414-194733.md. Audit flags broader remaining route coverage across attack_sim and genai but no regression in the migrated attack_sim slice.
+
+2026-04-14: Migrated admin into the Starlette mixed-mode path, completing the Tier 2 blueprint set. app/asgi.py now mounts admin_router, create_app() no longer registers admin_bp directly, and Flask compatibility is preserved via register_flask_compat_routes(app, admin_router, endpoint_prefix='admin').
+
+Admin wave manual fixes: moved JSON parsing onto get_json_or_default(), collapsed the GET/POST security-config pair into one method-dispatch handler, tightened invalid log-count and malformed base64 handling, and kept the static /api/v1/admin/users/export route ahead of the dynamic user-detail route for clarity.
+
+Added focused coverage in tests/unit/test_admin_routes.py and expanded tests/unit/test_migrated_flask_compat_routes.py with admin parity for security-config POST, export route precedence, invalid log counts, and privilege escalation behavior.
+
+Verification receipts: focused admin migration batch passed at 114 tests; full vuln-api unit suite passed at 715 passed / 1 skipped / 133 warnings; uvicorn smoke checks on http://127.0.0.1:8899 returned expected 200/201 responses for government, telecom, energy_utilities, security_ops, loyalty, compliance, ics_ot, infrastructure, genai, attack_sim, and admin.
+
+Source review artifacts for the admin wave: .agents/reviews/review-20260414-195444.md, review-20260414-195750.md, review-20260414-200233.md, and final review-20260414-200618.md (PASS WITH ISSUES, no P0/P1). Test audit artifact: .agents/reviews/test-audit-20260414-200859.md; it flags broader follow-on coverage debt but no regression that blocks Tier 2 completion.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Completed the Tier 2 Starlette migration set by moving the final admin blueprint onto the ASGI app, preserving Flask mixed-mode reachability through register_flask_compat_routes, and closing the remaining validation gaps for the subtask. Final receipts: focused admin migration tests passed at 114 tests, the full vuln-api unit suite passed at 715 passed / 1 skipped, representative uvicorn smoke checks succeeded across all 11 Tier 2 blueprints, and the final source review for the admin wave ended PASS WITH ISSUES with no P0/P1 blockers.
+<!-- SECTION:FINAL_SUMMARY:END -->

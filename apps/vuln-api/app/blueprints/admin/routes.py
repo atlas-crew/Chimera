@@ -2,20 +2,17 @@
 Routes for admin endpoints.
 Demonstrates privilege escalation, command injection, and admin panel vulnerabilities.
 """
-
-from flask import request, jsonify, render_template_string, session
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from datetime import datetime, timedelta
+import binascii
 import uuid
 import random
-import json
-import time
-import subprocess
-import os
-import pickle
 import base64
 
-from . import admin_bp
+from . import admin_router
 from app.models import *
+from app.routing import get_json_or_default
 from app.utils.security_config import security_config
 
 
@@ -23,38 +20,35 @@ from app.utils.security_config import security_config
 # SECURITY CONFIGURATION - Educational Defensive Layers
 # ============================================================================
 
-@admin_bp.route('/api/v1/admin/security-config', methods=['GET'])
-def get_security_config():
-    """Get the current state of global security protections"""
-    return jsonify(security_config.to_dict())
+@admin_router.route('/api/v1/admin/security-config', methods=['GET', 'POST'])
+async def security_config_endpoint(request: Request):
+    """Get or update the current state of global security protections."""
+    if request.method == 'POST':
+        data = await get_json_or_default(request)
+        security_config.update(data)
+        return JSONResponse({
+            "status": "updated",
+            "config": security_config.to_dict()
+        })
 
-
-@admin_bp.route('/api/v1/admin/security-config', methods=['POST'])
-def update_security_config():
-    """Update the state of global security protections"""
-    data = request.get_json() or {}
-    security_config.update(data)
-    return jsonify({
-        "status": "updated",
-        "config": security_config.to_dict()
-    })
+    return JSONResponse(security_config.to_dict())
 
 
 # ============================================================================
 # USER MANAGEMENT - Privilege Escalation Vulnerabilities
 # ============================================================================
 
-@admin_bp.route('/api/v1/admin/audit/suspend', methods=['POST'])
-def suspend_audit():
+@admin_router.route('/api/v1/admin/audit/suspend', methods=['POST'])
+async def suspend_audit(request: Request):
     """
     Suspend global auditing.
     VULNERABILITY: Compliance Violation, Audit Log Suppression
     """
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     duration = data.get('duration_minutes', 5)
     reason = data.get('reason', 'Maintenance')
     
-    return jsonify({
+    return JSONResponse({
         'status': 'auditing_suspended',
         'duration': duration,
         'reason': reason,
@@ -63,8 +57,8 @@ def suspend_audit():
     })
 
 
-@admin_bp.route('/api/v1/admin/users')
-def list_users():
+@admin_router.route('/api/v1/admin/users')
+async def list_users(request: Request):
     """List all users - Missing authorization"""
     # Vulnerability: No admin authorization check
     # Vulnerability: Exposes sensitive user data including password hashes
@@ -112,15 +106,56 @@ def list_users():
             ])
         ]
 
-    return jsonify({
+    return JSONResponse({
         'users': users,
         'total_count': len(users),
         'warning': 'Sensitive user data exposed without authorization'
     })
 
 
-@admin_bp.route('/api/v1/admin/users/<user_id>')
-def get_user_details(user_id):
+# Keep the static export route immediately above the dynamic user detail route
+# so the source order mirrors the routing intent during the migration.
+@admin_router.route('/api/v1/admin/users/export')
+async def export_user_data(request: Request):
+    """Export user data - Data exfiltration"""
+    # Vulnerability: No authorization check
+    # Vulnerability: Exports sensitive user data including credentials
+
+    export_format = request.query_params.get('format', 'json')
+    include_passwords = request.query_params.get('include_passwords', 'true').lower() == 'true'
+
+    users = []
+    for i in range(100):
+        user_data = {
+            'user_id': f'USR-{i:04d}',
+            'username': f'user{i}',
+            'email': f'user{i}@example.com',
+            'role': random.choice(['user', 'manager', 'admin']),
+            'ssn': f'{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}',
+            'phone': f'+1-555-{random.randint(1000, 9999)}',
+            'address': f'{random.randint(100, 9999)} Main St, City, ST 12345'
+        }
+
+        if include_passwords:
+            user_data['password_hash'] = f'md5:{random.randint(100000000, 999999999)}'
+            user_data['password_plaintext'] = f'Password{random.randint(1, 999)}!'
+
+        users.append(user_data)
+
+    export_id = f'EXPORT-{uuid.uuid4().hex[:8]}'
+
+    return JSONResponse({
+        'export_id': export_id,
+        'format': export_format,
+        'users': users,
+        'total_count': len(users),
+        'includes_passwords': include_passwords,
+        'warning': 'Sensitive user data exported without authorization'
+    })
+
+
+@admin_router.route('/api/v1/admin/users/<user_id>')
+async def get_user_details(request: Request, user_id):
     """Get user details - IDOR vulnerability"""
     # Vulnerability: Can access any user's details without authorization
     # Vulnerability: Exposes password hash and security questions
@@ -136,7 +171,7 @@ def get_user_details(user_id):
             'status': 'active'
         }
 
-    return jsonify({
+    return JSONResponse({
         'user_id': user_id,
         'username': user.get('username'),
         'email': user.get('email'),
@@ -163,16 +198,16 @@ def get_user_details(user_id):
     })
 
 
-@admin_bp.route('/api/v1/admin/users/<user_id>/elevate', methods=['POST'])
-def elevate_privileges(user_id):
+@admin_router.route('/api/v1/admin/users/<user_id>/elevate', methods=['POST'])
+async def elevate_privileges(request: Request, user_id):
     """Elevate user privileges - Missing authorization"""
     # Vulnerability: No admin authorization check
     # Vulnerability: Can elevate any user to admin
 
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     new_role = data.get('role', 'admin')
 
-    return jsonify({
+    return JSONResponse({
         'status': 'elevated',
         'user_id': user_id,
         'previous_role': 'user',
@@ -183,65 +218,26 @@ def elevate_privileges(user_id):
     })
 
 
-@admin_bp.route('/api/v1/admin/users/export')
-def export_user_data():
-    """Export user data - Data exfiltration"""
-    # Vulnerability: No authorization check
-    # Vulnerability: Exports sensitive user data including credentials
-
-    export_format = request.args.get('format', 'json')
-    include_passwords = request.args.get('include_passwords', 'true').lower() == 'true'
-
-    users = []
-    for i in range(100):
-        user_data = {
-            'user_id': f'USR-{i:04d}',
-            'username': f'user{i}',
-            'email': f'user{i}@example.com',
-            'role': random.choice(['user', 'manager', 'admin']),
-            'ssn': f'{random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(1000, 9999)}',
-            'phone': f'+1-555-{random.randint(1000, 9999)}',
-            'address': f'{random.randint(100, 9999)} Main St, City, ST 12345'
-        }
-
-        if include_passwords:
-            user_data['password_hash'] = f'md5:{random.randint(100000000, 999999999)}'
-            user_data['password_plaintext'] = f'Password{random.randint(1, 999)}!'
-
-        users.append(user_data)
-
-    export_id = f'EXPORT-{uuid.uuid4().hex[:8]}'
-
-    return jsonify({
-        'export_id': export_id,
-        'format': export_format,
-        'users': users,
-        'total_count': len(users),
-        'includes_passwords': include_passwords,
-        'warning': 'Sensitive user data exported without authorization'
-    })
-
-
 # ============================================================================
 # SYSTEM OPERATIONS - Command Injection Vulnerabilities
 # ============================================================================
 
-@admin_bp.route('/api/v1/admin/config', methods=['GET', 'POST'])
-def system_config():
+@admin_router.route('/api/v1/admin/config', methods=['GET', 'POST'])
+async def system_config(request: Request):
     """System configuration - Exposes sensitive configuration"""
     # Vulnerability: Exposes sensitive configuration without authorization
     # Vulnerability: Can modify configuration without validation
 
     if request.method == 'POST':
-        data = request.get_json() or {}
-        return jsonify({
+        data = await get_json_or_default(request)
+        return JSONResponse({
             'status': 'updated',
             'config': data,
             'warning': 'Configuration updated without validation'
         })
 
     # GET request - expose configuration
-    return jsonify({
+    return JSONResponse({
         'database': {
             'host': 'db.internal.example.com',
             'port': 5432,
@@ -271,14 +267,17 @@ def system_config():
     })
 
 
-@admin_bp.route('/api/v1/admin/logs')
-def view_logs():
+@admin_router.route('/api/v1/admin/logs')
+async def view_logs(request: Request):
     """View system logs - Information disclosure"""
     # Vulnerability: Exposes detailed system logs without authorization
     # Vulnerability: May contain sensitive information
 
-    log_type = request.args.get('type', 'application')
-    lines = int(request.args.get('lines', 100))
+    log_type = request.query_params.get('type', 'application')
+    try:
+        lines = int(request.query_params.get('lines', 100))
+    except (TypeError, ValueError):
+        lines = 100
 
     logs = [
         {
@@ -298,7 +297,7 @@ def view_logs():
         for i in range(lines)
     ]
 
-    return jsonify({
+    return JSONResponse({
         'log_type': log_type,
         'logs': logs,
         'total_lines': len(logs),
@@ -306,13 +305,13 @@ def view_logs():
     })
 
 
-@admin_bp.route('/api/v1/admin/backup', methods=['POST'])
-def trigger_backup():
+@admin_router.route('/api/v1/admin/backup', methods=['POST'])
+async def trigger_backup(request: Request):
     """Trigger backup - Command injection vulnerability"""
     # Vulnerability: Command injection through backup path parameter
     # Vulnerability: No authorization check
 
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     backup_path = data.get('backup_path', '/var/backups')
     backup_name = data.get('backup_name', f'backup_{datetime.now().strftime("%Y%m%d")}')
 
@@ -320,7 +319,7 @@ def trigger_backup():
     # Example: backup_path="/tmp; cat /etc/passwd"
     if any(char in backup_path for char in [';', '|', '&', '$', '`']):
         # Simulate command injection
-        return jsonify({
+        return JSONResponse({
             'vulnerability': 'COMMAND_INJECTION_DETECTED',
             'backup_path': backup_path,
             'message': 'Command injection successful',
@@ -330,7 +329,7 @@ def trigger_backup():
 
     backup_id = f'BACKUP-{uuid.uuid4().hex[:8]}'
 
-    return jsonify({
+    return JSONResponse({
         'status': 'started',
         'backup_id': backup_id,
         'backup_path': backup_path,
@@ -340,13 +339,13 @@ def trigger_backup():
     })
 
 
-@admin_bp.route('/api/v1/admin/execute', methods=['POST'])
-def execute_command():
+@admin_router.route('/api/v1/admin/execute', methods=['POST'])
+async def execute_command(request: Request):
     """Execute commands - Direct command injection"""
     # Vulnerability: Direct command execution without validation
     # Vulnerability: No authorization check
 
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     command = data.get('command', '')
     args = data.get('args', [])
 
@@ -361,7 +360,7 @@ def execute_command():
 
         # Simulate command injection payloads
         if any(char in command for char in [';', '|', '&', '$', '`', '\n']):
-            return jsonify({
+            return JSONResponse({
                 'vulnerability': 'COMMAND_INJECTION',
                 'command': full_command,
                 'message': 'Multiple commands executed',
@@ -378,7 +377,7 @@ def execute_command():
                 'warning': 'Command injection vulnerability exploited'
             })
 
-        return jsonify({
+        return JSONResponse({
             'status': 'executed',
             'command': full_command,
             'exit_code': 0,
@@ -387,21 +386,21 @@ def execute_command():
             'warning': 'Direct command execution without validation'
         })
 
-    return jsonify({
+    return JSONResponse({
         'error': 'No command provided'
-    }), 400
+    }, status_code=400)
 
 
 # ============================================================================
 # ATTACK SIMULATION - Security Testing Endpoints
 # ============================================================================
 
-@admin_bp.route('/api/v1/admin/attack/sqli', methods=['POST'])
-def test_sql_injection():
+@admin_router.route('/api/v1/admin/attack/sqli', methods=['POST'])
+async def test_sql_injection(request: Request):
     """SQL injection test endpoint"""
     # Intentionally vulnerable endpoint for WAF testing
 
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     query = data.get('query', '')
     table = data.get('table', 'users')
 
@@ -413,7 +412,7 @@ def test_sql_injection():
     is_injection = any(keyword in query.lower() for keyword in sql_keywords)
 
     if is_injection:
-        return jsonify({
+        return JSONResponse({
             'test': 'SQL_INJECTION',
             'status': 'vulnerable',
             'query': sql_query,
@@ -428,7 +427,7 @@ def test_sql_injection():
             'warning': 'SQL injection vulnerability confirmed'
         })
 
-    return jsonify({
+    return JSONResponse({
         'test': 'SQL_INJECTION',
         'status': 'tested',
         'query': sql_query,
@@ -436,12 +435,12 @@ def test_sql_injection():
     })
 
 
-@admin_bp.route('/api/v1/admin/attack/xxe', methods=['POST'])
-def test_xxe_injection():
+@admin_router.route('/api/v1/admin/attack/xxe', methods=['POST'])
+async def test_xxe_injection(request: Request):
     """XXE injection test endpoint"""
     # Intentionally vulnerable to XXE
 
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     xml_data = data.get('xml', '')
 
     # Detect XXE patterns
@@ -449,7 +448,7 @@ def test_xxe_injection():
     is_xxe = any(pattern in xml_data for pattern in xxe_patterns)
 
     if is_xxe:
-        return jsonify({
+        return JSONResponse({
             'test': 'XXE_INJECTION',
             'status': 'vulnerable',
             'xml_input': xml_data,
@@ -463,19 +462,19 @@ www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin''',
             'warning': 'XXE injection vulnerability confirmed'
         })
 
-    return jsonify({
+    return JSONResponse({
         'test': 'XXE_INJECTION',
         'status': 'tested',
         'result': 'No XXE detected'
     })
 
 
-@admin_bp.route('/api/v1/admin/attack/ssrf', methods=['POST'])
-def test_ssrf():
+@admin_router.route('/api/v1/admin/attack/ssrf', methods=['POST'])
+async def test_ssrf(request: Request):
     """SSRF test endpoint"""
     # Intentionally vulnerable to SSRF
 
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     url = data.get('url', '')
     method = data.get('method', 'GET')
 
@@ -484,7 +483,7 @@ def test_ssrf():
     is_ssrf = any(pattern in url.lower() for pattern in ssrf_patterns)
 
     if is_ssrf:
-        return jsonify({
+        return JSONResponse({
             'test': 'SSRF',
             'status': 'vulnerable',
             'url': url,
@@ -511,7 +510,7 @@ def test_ssrf():
             'warning': 'SSRF vulnerability confirmed'
         })
 
-    return jsonify({
+    return JSONResponse({
         'test': 'SSRF',
         'status': 'tested',
         'url': url,
@@ -519,12 +518,12 @@ def test_ssrf():
     })
 
 
-@admin_bp.route('/api/v1/admin/attack/deserialize', methods=['POST'])
-def test_deserialization():
+@admin_router.route('/api/v1/admin/attack/deserialize', methods=['POST'])
+async def test_deserialization(request: Request):
     """Insecure deserialization test endpoint"""
     # Intentionally vulnerable to deserialization attacks
 
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     serialized_data = data.get('data', '')
     format_type = data.get('format', 'pickle')
 
@@ -535,7 +534,7 @@ def test_deserialization():
 
             # Detect pickle payloads
             if b'pickle' in decoded or b'__reduce__' in decoded or b'__setstate__' in decoded:
-                return jsonify({
+                return JSONResponse({
                     'test': 'DESERIALIZATION',
                     'status': 'vulnerable',
                     'format': format_type,
@@ -552,10 +551,10 @@ def test_deserialization():
                     },
                     'warning': 'Insecure deserialization vulnerability confirmed'
                 })
-    except:
+    except (binascii.Error, TypeError, ValueError):
         pass
 
-    return jsonify({
+    return JSONResponse({
         'test': 'DESERIALIZATION',
         'status': 'tested',
         'result': 'No deserialization vulnerability detected'
@@ -566,16 +565,16 @@ def test_deserialization():
 # LEGACY ADMIN ENDPOINTS
 # ============================================================================
 
-@admin_bp.route('/api/transactions/split', methods=['POST'])
-def transactions_split():
+@admin_router.route('/api/transactions/split', methods=['POST'])
+async def transactions_split(request: Request):
     """Transaction splitting to avoid reporting thresholds"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     original_amount = data.get('amount', 0)
     split_count = data.get('split_count', 1)
 
     split_amount = original_amount / split_count if split_count > 0 else 0
 
-    return jsonify({
+    return JSONResponse({
         'original_amount': original_amount,
         'split_count': split_count,
         'split_amount': split_amount,
@@ -583,15 +582,15 @@ def transactions_split():
     })
 
 
-@admin_bp.route('/api/admin/orders/override', methods=['POST'])
-def admin_orders_override():
+@admin_router.route('/api/admin/orders/override', methods=['POST'])
+async def admin_orders_override(request: Request):
     """Administrative override of orders"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     order_id = data.get('order_id')
     new_status = data.get('status')
     override_reason = data.get('reason', 'manual override')
 
-    return jsonify({
+    return JSONResponse({
         'status': 'overridden',
         'order_id': order_id,
         'new_status': new_status,
@@ -601,10 +600,10 @@ def admin_orders_override():
     })
 
 
-@admin_bp.route('/api/customers/payment-methods')
-def customers_payment_methods():
+@admin_router.route('/api/customers/payment-methods')
+async def customers_payment_methods(request: Request):
     """List customer payment methods"""
-    customer_id = request.args.get('customer_id')
+    customer_id = request.query_params.get('customer_id')
 
     payment_methods = [
         {
@@ -619,16 +618,16 @@ def customers_payment_methods():
         for _ in range(3)
     ]
 
-    return jsonify({
+    return JSONResponse({
         'customer_id': customer_id,
         'payment_methods': payment_methods
     })
 
 
-@admin_bp.route('/api/customers/export')
-def customers_export():
+@admin_router.route('/api/customers/export')
+async def customers_export(request: Request):
     """Export customer roster - sensitive data exfiltration"""
-    segment = request.args.get('segment', 'all')
+    segment = request.query_params.get('segment', 'all')
 
     customers = [
         {
@@ -645,7 +644,7 @@ def customers_export():
         for i in range(50)
     ]
 
-    return jsonify({
+    return JSONResponse({
         'segment': segment,
         'customers': customers,
         'total_count': len(customers),
@@ -653,13 +652,13 @@ def customers_export():
     })
 
 
-@admin_bp.route('/api/logs/deletion', methods=['POST'])
-def logs_deletion():
+@admin_router.route('/api/logs/deletion', methods=['POST'])
+async def logs_deletion(request: Request):
     """Delete logs - Evidence tampering"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     systems = data.get('systems', ['siem', 'firewall'])
 
-    return jsonify({
+    return JSONResponse({
         'systems_targeted': systems,
         'logs_deleted': True,
         'recovery_possible': False,
@@ -667,15 +666,15 @@ def logs_deletion():
     })
 
 
-@admin_bp.route('/api/system/version')
-def system_version():
+@admin_router.route('/api/system/version')
+async def system_version(request: Request):
     """System version endpoint for fingerprinting"""
-    return jsonify({
+    return JSONResponse({
         'application': ' Demo Platform',
         'version': '2.1.0',
         'build': '20241201-1234',
         'environment': 'demo',
-        'frameworks': ['Flask', 'Python3.9'],
+        'frameworks': ['Starlette', 'Flask', 'Python3.9'],
         'database': 'in-memory',
         'server': 'gunicorn/20.1.0',
         'python_version': '3.9.18',
@@ -683,16 +682,16 @@ def system_version():
     })
 
 
-@admin_bp.route('/api/admin/users/create', methods=['POST'])
-def admin_create_user():
+@admin_router.route('/api/admin/users/create', methods=['POST'])
+async def admin_create_user(request: Request):
     """Administrative user creation - backdoor potential"""
-    data = request.get_json() or {}
+    data = await get_json_or_default(request)
     username = data.get('username')
     role = data.get('role', 'user')
 
     user_id = f'USR-{uuid.uuid4().hex[:8]}'
 
-    return jsonify({
+    return JSONResponse({
         'status': 'created',
         'user_id': user_id,
         'username': username,
@@ -702,12 +701,12 @@ def admin_create_user():
     })
 
 
-@admin_bp.route('/api/transactions/export')
-def transactions_export():
+@admin_router.route('/api/transactions/export')
+async def transactions_export(request: Request):
     """Export transaction data - data exfiltration vector"""
-    date_from = request.args.get('from', '2025-01-01')
-    date_to = request.args.get('to', datetime.now().isoformat()[:10])
-    export_format = request.args.get('format', 'json')
+    date_from = request.query_params.get('from', '2025-01-01')
+    date_to = request.query_params.get('to', datetime.now().isoformat()[:10])
+    export_format = request.query_params.get('format', 'json')
 
     transactions = [
         {
@@ -721,7 +720,7 @@ def transactions_export():
         for _ in range(100)
     ]
 
-    return jsonify({
+    return JSONResponse({
         'date_range': {'from': date_from, 'to': date_to},
         'format': export_format,
         'transactions': transactions,

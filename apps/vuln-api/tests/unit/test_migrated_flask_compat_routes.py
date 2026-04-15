@@ -30,6 +30,7 @@ def assert_matching_error_contract(flask_response, asgi_response):
 @pytest.mark.parametrize(
     ("path", "expected_status", "field", "expected_value"),
     [
+        ("/api/v1/admin/users", 200, "warning", "Sensitive user data exposed without authorization"),
         ("/api/v1/gov/cases/1", 200, "case_id", "1"),
         ("/api/v1/telecom/subscribers/sub-1/profile", 200, "subscriber", {"subscriber_id": "sub-1"}),
         ("/api/v1/energy-utilities/meters/meter-1/readings", 200, "reading", {"meter_id": "meter-1"}),
@@ -197,6 +198,56 @@ def test_attack_sim_command_execution_parity_between_flask_and_asgi(client, asgi
     assert asgi_response.json()["mode"] == "sequential"
     assert flask_response.get_json()["command_acknowledged"] is True
     assert asgi_response.json()["command_acknowledged"] is True
+
+
+def test_admin_mutation_parity_between_flask_and_asgi(client, asgi_client):
+    payload = {"role": "superadmin"}
+
+    flask_response = client.post("/api/v1/admin/users/USR-0002/elevate", json=payload)
+    asgi_response = asgi_client.post("/api/v1/admin/users/USR-0002/elevate", json=payload)
+
+    assert flask_response.status_code == 200
+    assert asgi_response.status_code == 200
+    assert flask_response.get_json()["new_role"] == "superadmin"
+    assert asgi_response.json()["new_role"] == "superadmin"
+    assert flask_response.get_json()["warning"] == "Privilege escalation performed without authorization"
+    assert asgi_response.json()["warning"] == "Privilege escalation performed without authorization"
+
+
+def test_admin_security_config_post_parity_between_flask_and_asgi(client, asgi_client):
+    payload = {"sql_injection_protection": False}
+
+    flask_response = client.post("/api/v1/admin/security-config", json=payload)
+    asgi_response = asgi_client.post("/api/v1/admin/security-config", json=payload)
+
+    assert flask_response.status_code == 200
+    assert asgi_response.status_code == 200
+    assert flask_response.get_json()["status"] == "updated"
+    assert asgi_response.json()["status"] == "updated"
+
+
+def test_admin_export_route_precedence_parity_between_flask_and_asgi(client, asgi_client):
+    flask_response = client.get("/api/v1/admin/users/export?include_passwords=false")
+    asgi_response = asgi_client.get("/api/v1/admin/users/export?include_passwords=false")
+
+    assert flask_response.status_code == 200
+    assert asgi_response.status_code == 200
+    assert flask_response.get_json()["total_count"] == 100
+    assert asgi_response.json()["total_count"] == 100
+    assert flask_response.get_json()["includes_passwords"] is False
+    assert asgi_response.json()["includes_passwords"] is False
+    assert "users" in flask_response.get_json()
+    assert "users" in asgi_response.json()
+
+
+def test_admin_invalid_log_count_parity_between_flask_and_asgi(client, asgi_client):
+    flask_response = client.get("/api/v1/admin/logs?lines=abc")
+    asgi_response = asgi_client.get("/api/v1/admin/logs?lines=abc")
+
+    assert flask_response.status_code == 200
+    assert asgi_response.status_code == 200
+    assert flask_response.get_json()["total_lines"] == 100
+    assert asgi_response.json()["total_lines"] == 100
 
 
 def test_malformed_json_rejected_by_flask_and_asgi(client, asgi_client):

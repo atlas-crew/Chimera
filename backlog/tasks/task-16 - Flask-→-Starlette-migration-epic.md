@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - codex
 created_date: '2026-04-12 04:06'
-updated_date: '2026-04-14 23:50'
+updated_date: '2026-04-15 00:16'
 labels:
   - refactor
 dependencies: []
@@ -81,4 +81,10 @@ Wave receipt: targeted regression batch passed with 88 tests in 6.72s; source re
 2026-04-14: Completed another Tier 2 Starlette migration wave by moving attack_sim onto the ASGI app and preserving create_app() reachability through the Flask compatibility bridge.
 
 Wave receipt: targeted regression batch passed with 97 tests in 6.46s; source review artifact .agents/reviews/review-20260414-194453.md; test audit artifact .agents/reviews/test-audit-20260414-194733.md. This wave also repaired eight previously dead attack_sim endpoints that were returning empty 200 responses in Flask.
+
+2026-04-14: Closed TASK-16.1 after migrating the final Tier 2 blueprint (admin) into the Starlette mixed-mode path. Tier 2 now has all 11 blueprints mounted in app/asgi.py with Flask compatibility preserved via register_flask_compat_routes while the broader epic continues.
+
+Admin/Tier 2 closure receipts: focused admin migration tests passed at 114 tests; full vuln-api unit suite passed at 715 passed / 1 skipped / 133 warnings; uvicorn smoke checks on http://127.0.0.1:8899 returned expected 200/201 responses across all 11 Tier 2 blueprints.
+
+Latest source review artifact: .agents/reviews/review-20260414-200618.md (PASS WITH ISSUES, no P0/P1). Latest test audit artifact: .agents/reviews/test-audit-20260414-200859.md; follow-on findings are broader coverage debt and ASGI middleware checks, not blockers for Tier 2 completion.
 <!-- SECTION:NOTES:END -->

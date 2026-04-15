@@ -170,6 +170,18 @@ class TestUserExport:
 class TestSystemConfiguration:
     """Test system configuration exposure vulnerabilities."""
 
+    def test_update_security_config(self, client):
+        """Test global security config updates remain reachable."""
+        response = client.post(
+            '/api/v1/admin/security-config',
+            json={'sql_injection_protection': False}
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['status'] == 'updated'
+        assert 'config' in data
+
     def test_get_config_no_auth(self, client):
         """Test system configuration exposed without authorization."""
         response = client.get('/api/v1/admin/config')
@@ -258,6 +270,15 @@ class TestSystemLogs:
         assert response.status_code == 200
         data = response.get_json()
         assert 'logs' in data
+
+    def test_view_logs_invalid_line_count_falls_back_to_default(self, client):
+        """Test invalid line counts do not crash the endpoint."""
+        response = client.get('/api/v1/admin/logs?lines=abc')
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['total_lines'] == 100
+        assert len(data['logs']) == 100
         assert len(data['logs']) > 0
         assert 'warning' in data
 
