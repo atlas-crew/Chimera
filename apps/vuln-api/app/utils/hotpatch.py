@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 import json as _json
 import logging
@@ -7,7 +9,9 @@ from typing import Any
 try:
     from starlette.requests import Request as StarletteRequest
     from starlette.responses import JSONResponse, Response as StarletteResponse
-except ImportError:  # pragma: no cover - Flask-first environments may not have Starlette yet.
+except (
+    ImportError
+):  # pragma: no cover - Flask-first environments may not have Starlette yet.
     StarletteRequest = None
     JSONResponse = None
     StarletteResponse = None
@@ -26,13 +30,21 @@ except ImportError:  # pragma: no cover - Flask remains installed during cutover
 logger = logging.getLogger(__name__)
 
 
-def _lookup_vulnerability_meta(request_path: str, config_attr: str, vuln_id: str | None):
+def _lookup_vulnerability_meta(
+    request_path: str, config_attr: str, vuln_id: str | None
+):
     vid = vuln_id
     meta = VULN_REGISTRY.get(vid) if vid else None
 
     if not meta:
         for entry_id, entry_meta in VULN_REGISTRY.items():
-            endpoint_path = entry_meta["endpoint"].split(" ")[-1].split("?")[0].split("{")[0].rstrip("/")
+            endpoint_path = (
+                entry_meta["endpoint"]
+                .split(" ")[-1]
+                .split("?")[0]
+                .split("{")[0]
+                .rstrip("/")
+            )
             if entry_meta["portal"] in request_path and endpoint_path in request_path:
                 vid = entry_id
                 meta = entry_meta
@@ -40,7 +52,10 @@ def _lookup_vulnerability_meta(request_path: str, config_attr: str, vuln_id: str
 
     if not meta:
         for entry_id, entry_meta in VULN_REGISTRY.items():
-            if entry_meta["config_key"] == config_attr and f'/{entry_meta["portal"]}/' in request_path:
+            if (
+                entry_meta["config_key"] == config_attr
+                and f'/{entry_meta["portal"]}/' in request_path
+            ):
                 vid = entry_id
                 meta = entry_meta
                 break
@@ -48,10 +63,19 @@ def _lookup_vulnerability_meta(request_path: str, config_attr: str, vuln_id: str
     return vid, meta
 
 
-def _add_headers(response: Any, is_secure: bool, vid: str | None, meta: dict[str, Any] | None) -> None:
+def _add_headers(
+    response: Any, is_secure: bool, vid: str | None, meta: dict[str, Any] | None
+) -> None:
     response.headers["X-Chimera-Patched"] = str(is_secure).lower()
 
     if not meta:
+        return
+
+    if vid is None:
+        logger.warning(
+            "Vulnerability metadata resolved without an id for endpoint %s",
+            meta.get("endpoint"),
+        )
         return
 
     response.headers["X-Chimera-Vuln-ID"] = vid
@@ -64,7 +88,9 @@ def _add_headers(response: Any, is_secure: bool, vid: str | None, meta: dict[str
         response.headers["X-Chimera-Hint"] = meta["description"].split(".")[0]
 
 
-def _chimera_metadata(vid: str, meta: dict[str, Any], is_secure: bool) -> dict[str, Any]:
+def _chimera_metadata(
+    vid: str, meta: dict[str, Any], is_secure: bool
+) -> dict[str, Any]:
     return {
         "vuln_id": vid,
         "vuln_type": meta["name"],
@@ -125,12 +151,20 @@ def _inject_education_metadata(
             return response
 
         if StarletteResponse is not None and isinstance(response, StarletteResponse):
-            existing_headers = {key: value for key, value in response.headers.items() if key.lower() != "content-length"}
+            existing_headers = {
+                key: value
+                for key, value in response.headers.items()
+                if key.lower() != "content-length"
+            }
             response.body = response.render(data)
             response.init_headers(existing_headers)
             return response
 
-        headers = {key: value for key, value in response.headers.items() if key.lower() != "content-length"}
+        headers = {
+            key: value
+            for key, value in response.headers.items()
+            if key.lower() != "content-length"
+        }
         return JSONResponse(data, status_code=response.status_code, headers=headers)
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         logger.warning("Error injecting Chimera education metadata: %s", exc)
@@ -159,7 +193,14 @@ def _ensure_starlette_response(result: Any) -> StarletteResponse:
     return StarletteResponse(payload, status_code=status_code, headers=headers)
 
 
-def _finalize_response(response: Any, request_path: str, headers: Any, config_attr: str, vuln_id: str | None, is_secure: bool):
+def _finalize_response(
+    response: Any,
+    request_path: str,
+    headers: Any,
+    config_attr: str,
+    vuln_id: str | None,
+    is_secure: bool,
+):
     vid, meta = _lookup_vulnerability_meta(request_path, config_attr, vuln_id)
     _add_headers(response, is_secure, vid, meta)
 
@@ -169,7 +210,9 @@ def _finalize_response(response: Any, request_path: str, headers: Any, config_at
     return response
 
 
-def _get_starlette_request(args: tuple[Any, ...], kwargs: dict[str, Any]) -> StarletteRequest | None:
+def _get_starlette_request(
+    args: tuple[Any, ...], kwargs: dict[str, Any]
+) -> StarletteRequest | None:
     if StarletteRequest is None:
         return None
 

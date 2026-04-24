@@ -1,11 +1,11 @@
 ---
 id: TASK-16.5
 title: Rewrite hotpatch decorator for Starlette
-status: In Progress
+status: Done
 assignee:
   - codex
 created_date: '2026-04-12 04:08'
-updated_date: '2026-04-14 14:37'
+updated_date: '2026-04-24 06:08'
 labels:
   - refactor
 dependencies: []
@@ -82,12 +82,12 @@ def hotpatch(vuln_type, vuln_id=None):
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 hotpatch decorator is async-compatible
-- [ ] #2 X-Chimera-Patched, Vuln-ID, Vuln-Type, OWASP, CWE, Severity headers injected correctly
-- [ ] #3 X-Chimera-Hint header injected when vulnerable
-- [ ] #4 X-Chimera-Education: true opt-in injects _chimera metadata into JSON body
-- [ ] #5 Existing vulnerability tests that assert on X-Chimera-* headers still pass
-- [ ] #6 Decorator works with VULN_REGISTRY heuristic fallback lookup
+- [x] #1 hotpatch decorator is async-compatible
+- [x] #2 X-Chimera-Patched, Vuln-ID, Vuln-Type, OWASP, CWE, Severity headers injected correctly
+- [x] #3 X-Chimera-Hint header injected when vulnerable
+- [x] #4 X-Chimera-Education: true opt-in injects _chimera metadata into JSON body
+- [x] #5 Existing vulnerability tests that assert on X-Chimera-* headers still pass
+- [x] #6 Decorator works with VULN_REGISTRY heuristic fallback lookup
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -111,4 +111,18 @@ Added focused tests in tests/unit/test_hotpatch.py plus router path conversion c
 Focused verification: `cd apps/vuln-api && uv run pytest tests/unit/test_hotpatch.py tests/unit/test_banking_routes.py tests/unit/test_routing.py -q` -> 10 passed.
 
 Independent review artifact review-20260414-103047.md was remediated; rerun review/audit artifacts are still pending from the scripted Codex reviewers.
+
+2026-04-24: Closed the remaining validation loop for the Starlette hotpatch rewrite. Re-ran the focused verification slice against the current code and confirmed `cd apps/vuln-api && uv run pytest tests/unit/test_hotpatch.py tests/unit/test_banking_routes.py tests/unit/test_routing.py -q` now passes at 19 tests.
+
+Independent source review artifacts: .agents/reviews/review-20260424-015922.md, review-20260424-020213.md, and review-20260424-020625.md. The concrete follow-up issues fixed in this loop were the optional-Starlette type-annotation import trap, restoring an observable/logged contract when metadata resolves without a vuln id, and preserving the pragma placement on the Starlette import fallback branch. Remaining review comments were non-gating style/introspection concerns rather than reproduced behavior regressions.
+
+Independent test audit artifact: .agents/reviews/test-audit-20260424-020352.md. The audit still calls out additional branch-coverage opportunities inside hotpatch response conversion helpers, but the diff-introduced contract for async compatibility, Flask/Starlette request resolution, education metadata injection, Flask fallback behavior, and route path conversion is covered by the focused test slice and existing banking regression coverage.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Completed the Starlette hotpatch decorator rewrite and closed its validation loop. The decorator now supports async Starlette handlers while preserving Flask compatibility, X-Chimera header injection, and optional _chimera body metadata during the mixed-mode migration.
+
+Validation is current: the focused hotpatch/banking/routing slice passed at 19 tests, and the task now has fresh independent review and test-audit artifacts recorded. This unblocks TASK-16.3, which depends on the hotpatch path being stable before the Tier 4 blueprint wave.
+<!-- SECTION:FINAL_SUMMARY:END -->
