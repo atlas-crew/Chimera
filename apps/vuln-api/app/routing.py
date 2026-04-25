@@ -6,17 +6,22 @@ Flask-style @router.route('/path') decorators. This shim bridges the gap
 so 486 route registrations don't need manual conversion to declarative style.
 """
 
-import asyncio
 import inspect
 import json
 import re
 from functools import wraps
 from types import SimpleNamespace
 
+from asgiref.sync import async_to_sync
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response as StarletteResponse
 from starlette.routing import BaseRoute, Route, Router as _StarletteRouter
+
+
+async def _await_coro(coro):
+    """Adapter so async_to_sync can drive an already-created coroutine."""
+    return await coro
 
 _PATH_PARAM_RE = re.compile(r"<(?:(?P<converter>[a-zA-Z_][a-zA-Z0-9_]*):)?(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)>")
 _STARLETTE_PATH_PARAM_RE = re.compile(r"{(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)(?::(?P<converter>[a-zA-Z_][a-zA-Z0-9_]*))?}")
@@ -330,7 +335,7 @@ def _coerce_flask_response(result):
                 response.mimetype = media_type
             return response
 
-        return asyncio.run(_render_starlette_response())
+        return async_to_sync(_render_starlette_response)()
 
     return result
 
@@ -339,8 +344,11 @@ def register_flask_compat_routes(app, router: DecoratorRouter, *, endpoint_prefi
     """Mirror migrated Starlette routes into Flask while the transition is in flight.
 
     This bridge is intentionally WSGI-only transitional glue; it executes async
-    handlers with asyncio.run() so create_app() can keep serving migrated
-    Starlette routes until the full cutover is complete.
+    handlers via asgiref.async_to_sync so create_app() can keep serving migrated
+    Starlette routes until the full cutover is complete. async_to_sync is used
+    instead of asyncio.run because the latter races with gevent-patched I/O
+    under gunicorn's gevent worker and intermittently leaves coroutines
+    un-awaited, producing 500s.
     """
     from flask import request as flask_request
 
@@ -353,9 +361,13 @@ def register_flask_compat_routes(app, router: DecoratorRouter, *, endpoint_prefi
         def compat_view(_route=route, **kwargs):
             adapter = FlaskRequestAdapter(flask_request, kwargs)
             try:
-                result = _route.endpoint(adapter)
-                if inspect.isawaitable(result):
-                    result = asyncio.run(result)
+                endpoint = _route.endpoint
+                if inspect.iscoroutinefunction(endpoint) or inspect.iscoroutinefunction(getattr(endpoint, "__wrapped__", None)):
+                    result = async_to_sync(endpoint)(adapter)
+                else:
+                    result = endpoint(adapter)
+                    if inspect.isawaitable(result):
+                        result = async_to_sync(_await_coro)(result)
             except HTTPException as exc:
                 result = JSONResponse(
                     build_http_exception_body(
