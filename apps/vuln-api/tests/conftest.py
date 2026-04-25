@@ -58,7 +58,9 @@ except ImportError:
 @pytest.fixture
 def app():
     """Create Flask application for testing."""
-    app = create_app()
+    # DEBUG=True exercises the dev-mode localhost bypass (used by the education
+    # parity tests that assert localhost requests skip the auth gate).
+    app = create_app({"DEBUG": True, "TESTING": True})
     app.config.update({
         "TESTING": True,
     })
@@ -74,7 +76,7 @@ def client(app):
 @pytest.fixture
 def asgi_app():
     """Create Starlette application for migrated route testing."""
-    app = create_asgi_app({"TESTING": True})
+    app = create_asgi_app({"DEBUG": True, "TESTING": True})
     yield app
 
 
