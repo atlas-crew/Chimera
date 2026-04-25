@@ -24,7 +24,8 @@ class AppConfig:
         )
         self.debug: bool = overrides.get(
             'DEBUG',
-            os.environ.get('DEMO_MODE', 'true').lower() == 'true',
+            os.environ.get('FLASK_ENV', '').lower() == 'development'
+            or os.environ.get('DEBUG', '').lower() in ('1', 'true', 'yes'),
         )
         self.testing: bool = overrides.get('TESTING', False)
         self.demo_mode: str = os.environ.get('DEMO_MODE', 'full').lower()
@@ -100,7 +101,13 @@ app_config = AppConfig()
 
 
 def init_config(overrides: dict | None = None) -> AppConfig:
-    """Re-initialize the global config singleton with optional overrides."""
-    global app_config
-    app_config = AppConfig(overrides)
+    """Re-initialize the global config singleton with optional overrides.
+
+    Mutates the existing `app_config` instance in place so that modules that
+    did `from app.config import app_config` continue to see the updated
+    values — otherwise those modules would hold a reference to the pre-init
+    instance and silently diverge from callers that re-import.
+    """
+    fresh = AppConfig(overrides)
+    app_config.__dict__.update(fresh.__dict__)
     return app_config
