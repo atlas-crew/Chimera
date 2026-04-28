@@ -195,7 +195,7 @@ def create_app(config=None):
     # back into Flask via register_flask_compat_routes so app.py/local WSGI
     # callers keep working while the cutover remains in mixed mode.
     from app.blueprints.auth import auth_bp
-    from app.blueprints.banking import banking_bp
+    from app.blueprints.banking import banking_router
     from app.blueprints.mobile import mobile_router
     from app.blueprints.healthcare import healthcare_bp
     from app.blueprints.ecommerce import ecommerce_bp
@@ -228,7 +228,6 @@ def create_app(config=None):
 
     # Register remaining Flask blueprints while migrated routes stay mirrored via compat adapters.
     app.register_blueprint(auth_bp)
-    app.register_blueprint(banking_bp)
     app.register_blueprint(healthcare_bp)
     app.register_blueprint(ecommerce_bp)
     app.register_blueprint(insurance_bp)
@@ -257,6 +256,7 @@ def create_app(config=None):
     register_flask_compat_routes(app, mobile_router, endpoint_prefix="mobile")
     register_flask_compat_routes(app, payments_router, endpoint_prefix="payments")
     register_flask_compat_routes(app, saas_router, endpoint_prefix="saas")
+    register_flask_compat_routes(app, banking_router, endpoint_prefix="banking")
     register_flask_compat_routes(app, diagnostics_router, endpoint_prefix="diagnostics")
     register_flask_compat_routes(app, throughput_router, endpoint_prefix="throughput")
     register_flask_compat_routes(app, recorder_router, endpoint_prefix="recorder")

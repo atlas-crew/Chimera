@@ -160,24 +160,9 @@ def test_hotpatch_async_flask_views_still_get_decorated():
     assert response.get_json()["_chimera"]["vuln_id"] == "CHM-BANK-002"
 
 
-def test_hotpatch_flask_routes_still_work_when_starlette_symbols_missing(client, monkeypatch):
-    import app.utils.hotpatch as hotpatch_module
-
-    monkeypatch.setattr(hotpatch_module, "StarletteRequest", None)
-    monkeypatch.setattr(hotpatch_module, "StarletteResponse", None)
-    monkeypatch.setattr(hotpatch_module, "JSONResponse", None)
-
-    accounts_db["ACC-HOTPATCH-003"] = {
-        "account_id": "ACC-HOTPATCH-003",
-        "user_id": "victim-user",
-        "account_type": "checking",
-        "balance": 42.0,
-        "currency": "USD",
-        "status": "active",
-        "created_at": "2026-04-14T00:00:00",
-    }
-
-    response = client.get("/api/v1/banking/accounts/ACC-HOTPATCH-003")
-
-    assert response.status_code == 200
-    assert response.headers["X-Chimera-Vuln-ID"] == "CHM-BANK-002"
+# Removed: test_hotpatch_flask_routes_still_work_when_starlette_symbols_missing
+# Banking is now an async Starlette route (task-16.3); its handler constructs a
+# JSONResponse directly, so the "Starlette uninstalled" defensive scenario the
+# test simulated no longer reflects any production code path. The other
+# hotpatch tests still cover sync vs async dispatch and the Flask compat-shim
+# header injection.

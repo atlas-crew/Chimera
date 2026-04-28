@@ -1,8 +1,8 @@
 """
 Routes for banking endpoints with intentional vulnerabilities for WAF testing.
 """
-
-from flask import request, jsonify, session
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from datetime import datetime, timedelta
 import uuid
 import random
@@ -11,7 +11,7 @@ from decimal import Decimal, ROUND_DOWN
 import threading
 import hashlib
 
-from . import banking_bp
+from . import banking_router
 from app.models import *
 from app.utils.hotpatch import hotpatch
 
@@ -21,10 +21,10 @@ transfer_locks = {}
 transfer_lock_mutex = threading.Lock()
 
 
-@banking_bp.route('/banking/login')
-def banking_portal():
+@banking_router.route('/banking/login')
+async def banking_portal(request: Request):
     """Banking portal entry point"""
-    return jsonify({
+    return JSONResponse({
         'service': ' Banking Portal',
         'version': '2.1.0',
         'login_methods': ['username_password', 'mfa', 'biometric'],
@@ -36,23 +36,23 @@ def banking_portal():
 # ACCOUNT MANAGEMENT ENDPOINTS
 # ============================================================================
 
-@banking_bp.route('/api/v1/banking/accounts', methods=['GET'])
+@banking_router.route('/api/v1/banking/accounts', methods=['GET'])
 @hotpatch('bola')
-def list_accounts(is_secure=False):
+async def list_accounts(request: Request, is_secure=False):
     """
     List user accounts
     VULNERABILITY (when insecure): BOLA/IDOR — no ownership check. 
     Toggled by @hotpatch('bola') based on security_config.
     """
-    user_id = request.args.get('user_id')
+    user_id = request.query_params.get('user_id')
 
     # Weak authentication check
     if not user_id:
-        user_id = session.get('user_id', 'user-demo')
+        user_id = request.session.get('user_id', 'user-demo')
 
     if is_secure:
         # SECURE: Only return accounts belonging to the authenticated session user
-        authenticated_user = session.get('user_id', 'user-demo')
+        authenticated_user = request.session.get('user_id', 'user-demo')
         user_accounts = [acc for acc in accounts_db.values() if acc.get('user_id') == authenticated_user]
         demo_user = authenticated_user
     else:
@@ -94,16 +94,16 @@ def list_accounts(is_secure=False):
         'count': len(user_accounts)
     }
 
-    if not is_secure and user_id and user_id != session.get('user_id', 'user-demo'):
+    if not is_secure and user_id and user_id != request.session.get('user_id', 'user-demo'):
         response['vulnerability'] = 'BOLA_IDOR_DETECTED'
         response['vulnerability_type'] = 'BOLA'
 
-    return jsonify(response)
+    return JSONResponse(response)
 
 
-@banking_bp.route('/api/v1/banking/accounts/<account_id>', methods=['GET'])
+@banking_router.route('/api/v1/banking/accounts/<account_id>', methods=['GET'])
 @hotpatch('bola')
-def get_account_details(account_id, is_secure=False):
+async def get_account_details(request: Request, account_id, is_secure=False):
     """
     Get account details
     VULNERABILITY (when insecure): BOLA/IDOR — no ownership check.
@@ -112,18 +112,18 @@ def get_account_details(account_id, is_secure=False):
     account = accounts_db.get(account_id)
 
     if not account:
-        return jsonify({'error': 'Account not found'}), 404
+        return JSONResponse({'error': 'Account not found'}, status_code = 404)
 
-    is_owner = account['user_id'] == session.get('user_id', 'user-demo')
+    is_owner = account['user_id'] == request.session.get('user_id', 'user-demo')
     
     if is_secure:
         # SECURE: Check if account belongs to the logged-in user
         if not is_owner:
-            return jsonify({
+            return JSONResponse({
                 'error': 'Unauthorized', 
                 'vulnerability': 'BOLA_IDOR_BLOCKED',
                 'vulnerability_type': 'BOLA'
-            }), 403
+            }, status_code = 403)
 
     # Generate a stable masked account number for realism
     acc_hash = int(hashlib.md5(account['account_id'].encode()).hexdigest(), 16)
@@ -150,20 +150,20 @@ def get_account_details(account_id, is_secure=False):
         response['vulnerability'] = 'BOLA_IDOR_DETECTED'
         response['vulnerability_type'] = 'BOLA'
 
-    return jsonify(response)
+    return JSONResponse(response)
 
 
 # ============================================================================
 # WIRE TRANSFER ENDPOINT
 # ============================================================================
 
-@banking_bp.route('/api/v1/banking/wire-transfer', methods=['POST'])
-def create_wire_transfer():
+@banking_router.route('/api/v1/banking/wire-transfer', methods=['POST'])
+async def create_wire_transfer(request: Request):
     """
     Process wire transfer without AML checks.
     VULNERABILITY: Accepts bypass_aml flag without authorization.
     """
-    data = request.get_json() or {}
+    data = await request.json() or {}
     wire = {
         'wire_id': f'WIRE-{uuid.uuid4().hex[:8].upper()}',
         'amount': data.get('amount', 0),
@@ -172,15 +172,15 @@ def create_wire_transfer():
         'status': 'completed',
         'timestamp': datetime.now().isoformat(),
     }
-    return jsonify({'wire': wire}), 201
+    return JSONResponse({'wire': wire}, status_code = 201)
 
 
 # ============================================================================
 # BENEFICIARY ENDPOINT
 # ============================================================================
 
-@banking_bp.route('/api/v1/banking/beneficiaries/<beneficiary_id>', methods=['GET'])
-def get_beneficiary(beneficiary_id):
+@banking_router.route('/api/v1/banking/beneficiaries/<beneficiary_id>', methods=['GET'])
+async def get_beneficiary(request: Request, beneficiary_id):
     """
     Get beneficiary details without ownership verification.
     VULNERABILITY: IDOR — any user can access any beneficiary record.
@@ -192,22 +192,22 @@ def get_beneficiary(beneficiary_id):
         'bank': 'Example Bank',
         'user_id': 'user-victim',
     }
-    return jsonify({'beneficiary': beneficiary})
+    return JSONResponse({'beneficiary': beneficiary})
 
 
 # ============================================================================
 # KYC DOCUMENTS EXPORT ENDPOINT
 # ============================================================================
 
-@banking_bp.route('/api/v1/banking/kyc/documents/export', methods=['GET'])
-def export_kyc_documents():
+@banking_router.route('/api/v1/banking/kyc/documents/export', methods=['GET'])
+async def export_kyc_documents(request: Request):
     """
     Export KYC documents without admin verification.
     VULNERABILITY: Broken access control — no role check, PII exposed.
     """
-    include_pii = request.args.get('include_pii', 'false').lower() == 'true'
+    include_pii = request.query_params.get('include_pii', 'false').lower() == 'true'
     documents = [
         {'doc_id': 'KYC-001', 'user_id': 'user-001', 'type': 'passport', 'status': 'verified'},
         {'doc_id': 'KYC-002', 'user_id': 'user-002', 'type': 'drivers_license', 'status': 'pending'},
     ]
-    return jsonify({'documents': documents, 'include_pii': include_pii})
+    return JSONResponse({'documents': documents, 'include_pii': include_pii})
