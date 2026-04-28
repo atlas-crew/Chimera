@@ -56,9 +56,6 @@ from .auth_helpers import (
     hash_password,
     verify_password,
     extract_bearer_token,
-    extract_api_key,
-    require_auth,
-    require_role,
     create_session,
     validate_session,
     invalidate_session,
@@ -69,14 +66,11 @@ from .auth_helpers import (
 from .monitoring import (
     setup_logging,
     logger,
-    log_request,
-    track_performance,
     log_audit_event,
     log_security_event,
     log_exception,
     metrics,
     MetricsCollector,
-    request_id_middleware
 )
 
 __all__ = [
@@ -132,9 +126,6 @@ __all__ = [
     'hash_password',
     'verify_password',
     'extract_bearer_token',
-    'extract_api_key',
-    'require_auth',
-    'require_role',
     'create_session',
     'validate_session',
     'invalidate_session',
@@ -144,12 +135,9 @@ __all__ = [
     # Monitoring
     'setup_logging',
     'logger',
-    'log_request',
-    'track_performance',
     'log_audit_event',
     'log_security_event',
     'log_exception',
     'metrics',
     'MetricsCollector',
-    'request_id_middleware'
 ]

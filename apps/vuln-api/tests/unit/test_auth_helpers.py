@@ -5,14 +5,12 @@ Tests cover:
 - Token generation and validation
 - Password hashing and verification
 - API key generation
-- Decorators (require_auth, require_role)
 - Weak authentication mode
 """
 
 import pytest
 import time
 from unittest.mock import patch
-from flask import g
 from app.utils.auth_helpers import (
     TokenError,
     generate_token,
@@ -22,9 +20,6 @@ from app.utils.auth_helpers import (
     hash_password,
     verify_password,
     extract_bearer_token,
-    extract_api_key,
-    require_auth,
-    require_role,
     create_session,
     validate_session,
     invalidate_session,
@@ -264,117 +259,6 @@ class TestTokenExtraction:
         assert extract_bearer_token('Bearer') is None
         assert extract_bearer_token('') is None
         assert extract_bearer_token(None) is None
-
-    def test_extract_api_key_from_header(self, app):
-        """Test extracting API key from header."""
-        with app.test_request_context(headers={'X-API-Key': 'tx_api_key_123'}):
-            key = extract_api_key()
-            assert key == 'tx_api_key_123'
-
-    def test_extract_api_key_from_query(self, app):
-        """Test extracting API key from query parameter."""
-        with app.test_request_context('/?api_key=tx_query_key_456'):
-            key = extract_api_key(allow_query=True)
-            assert key == 'tx_query_key_456'
-
-    def test_extract_api_key_query_not_allowed(self, app):
-        """Test query parameter ignored when not allowed."""
-        with app.test_request_context('/?api_key=tx_key'):
-            key = extract_api_key(allow_query=False)
-            assert key is None
-
-
-class TestRequireAuthDecorator:
-    """Test require_auth decorator."""
-
-    def test_require_auth_valid_token(self, app):
-        """Test decorator allows valid token."""
-        token = generate_token('user_123')
-        with app.test_request_context(headers={'Authorization': f'Bearer {token}'}):
-            @require_auth()
-            def protected_view():
-                return {'success': True}
-
-            result = protected_view()
-
-            assert result == {'success': True}
-            assert g.user_id == 'user_123'
-            assert g.auth_method == 'token'
-
-    def test_require_auth_missing_token(self, app):
-        """Test decorator rejects missing token."""
-        with app.test_request_context():
-            @require_auth()
-            def protected_view():
-                return {'success': True}
-
-            response, status_code = protected_view()
-
-            assert status_code == 401
-
-    def test_require_auth_invalid_token(self, app):
-        """Test decorator rejects invalid token."""
-        with app.test_request_context(headers={'Authorization': 'Bearer invalid'}):
-            @require_auth()
-            def protected_view():
-                return {'success': True}
-
-            response, status_code = protected_view()
-
-            assert status_code == 401
-
-    def test_require_auth_api_key(self, app):
-        """Test decorator allows valid API key."""
-        with app.test_request_context(headers={'X-API-Key': 'tx_valid_key'}):
-            @require_auth(allow_api_key=True)
-            def protected_view():
-                return {'success': True}
-
-            result = protected_view()
-
-            assert result == {'success': True}
-            assert g.auth_method == 'api_key'
-
-
-class TestRequireRoleDecorator:
-    """Test require_role decorator."""
-
-    def test_require_role_authorized(self, app):
-        """Test decorator allows authorized role."""
-        with app.test_request_context():
-            g.token_payload = {'user_id': 'user_123', 'role': 'admin'}
-
-            @require_role(['admin', 'superuser'])
-            def admin_view():
-                return {'success': True}
-
-            result = admin_view()
-
-            assert result == {'success': True}
-
-    def test_require_role_unauthorized(self, app):
-        """Test decorator rejects unauthorized role."""
-        with app.test_request_context():
-            g.token_payload = {'user_id': 'user_123', 'role': 'user'}
-
-            @require_role(['admin'])
-            def admin_view():
-                return {'success': True}
-
-            response, status_code = admin_view()
-
-            assert status_code == 403
-
-    def test_require_role_no_token(self, app):
-        """Test decorator rejects when no token payload."""
-        with app.test_request_context():
-            @require_role(['admin'])
-            def admin_view():
-                return {'success': True}
-
-            response, status_code = admin_view()
-
-            assert status_code == 403
 
 
 class TestSessionManagement:

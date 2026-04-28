@@ -5,8 +5,6 @@ Tests cover:
 - Structured logging
 - Audit event logging
 - Metrics collection
-- Request ID generation
-- Performance tracking
 """
 
 import pytest
@@ -18,14 +16,10 @@ from app.utils.monitoring import (
     StructuredFormatter,
     setup_logging,
     logger,
-    log_request,
-    track_performance,
     log_audit_event,
     log_security_event,
     MetricsCollector,
     metrics,
-    generate_request_id,
-    request_id_middleware,
     log_exception
 )
 
@@ -79,34 +73,6 @@ class TestStructuredFormatter:
             assert 'exception' in log_data
             assert 'ValueError' in log_data['exception']
 
-    def test_structured_formatter_with_request_context(self, app):
-        """Test structured formatter includes request context."""
-        with app.test_request_context(
-            '/api/test', method='GET',
-            environ_base={'REMOTE_ADDR': '127.0.0.1'}
-        ):
-            from flask import g
-            g.request_id = 'req_123'
-
-            formatter = StructuredFormatter()
-            record = logging.LogRecord(
-                name='test',
-                level=logging.INFO,
-                pathname='test.py',
-                lineno=1,
-                msg='Test',
-                args=(),
-                exc_info=None
-            )
-
-            formatted = formatter.format(record)
-            log_data = json.loads(formatted)
-
-            assert log_data['request']['method'] == 'GET'
-            assert log_data['request']['path'] == '/api/test'
-            assert log_data['request_id'] == 'req_123'
-
-
 class TestSetupLogging:
     """Test logging setup function."""
 
@@ -131,106 +97,6 @@ class TestSetupLogging:
 
         handler = test_logger.handlers[0]
         assert not isinstance(handler.formatter, StructuredFormatter)
-
-
-class TestLogRequestDecorator:
-    """Test log_request decorator."""
-
-    @patch('app.utils.monitoring.logger')
-    def test_log_request_basic(self, mock_logger, app):
-        """Test basic request logging."""
-        with app.test_request_context(
-            '/api/test', method='GET',
-            environ_base={'REMOTE_ADDR': '127.0.0.1'}
-        ):
-            @log_request()
-            def test_view():
-                return {'success': True}
-
-            result = test_view()
-
-            assert result == {'success': True}
-            assert mock_logger.info.called
-
-    @patch('app.utils.monitoring.logger')
-    def test_log_request_with_headers(self, mock_logger, app):
-        """Test request logging includes headers."""
-        with app.test_request_context(
-            '/api/test', method='POST',
-            headers={'Authorization': 'Bearer token'},
-            environ_base={'REMOTE_ADDR': '127.0.0.1'}
-        ):
-            @log_request(include_headers=True)
-            def test_view():
-                return {'success': True}
-
-            test_view()
-
-            # Check that headers were logged
-            call_args = mock_logger.info.call_args_list[0]
-            assert 'headers' in str(call_args)
-
-    @patch('app.utils.monitoring.logger')
-    def test_log_request_exception_handling(self, mock_logger, app):
-        """Test request logging handles exceptions."""
-        with app.test_request_context(
-            '/api/test', method='GET',
-            environ_base={'REMOTE_ADDR': '127.0.0.1'}
-        ):
-            @log_request()
-            def test_view():
-                raise ValueError('Test error')
-
-            with pytest.raises(ValueError):
-                test_view()
-
-            # Should log error
-            assert mock_logger.error.called
-
-
-class TestTrackPerformanceDecorator:
-    """Test track_performance decorator."""
-
-    @patch('app.utils.monitoring.logger')
-    def test_track_performance_basic(self, mock_logger):
-        """Test basic performance tracking."""
-        @track_performance('test_operation')
-        def test_func():
-            return 'result'
-
-        result = test_func()
-
-        assert result == 'result'
-        assert mock_logger.info.called
-
-    @patch('app.utils.monitoring.logger')
-    def test_track_performance_measures_duration(self, mock_logger):
-        """Test performance tracking measures duration."""
-        import time
-
-        @track_performance('slow_operation')
-        def slow_func():
-            time.sleep(0.01)
-            return 'done'
-
-        slow_func()
-
-        # Check logged duration
-        call_args = mock_logger.info.call_args_list[0]
-        assert 'duration_ms' in str(call_args)
-
-    @patch('app.utils.monitoring.logger')
-    def test_track_performance_exception_handling(self, mock_logger):
-        """Test performance tracking logs exceptions."""
-        @track_performance('failing_op')
-        def failing_func():
-            raise ValueError('Test error')
-
-        with pytest.raises(ValueError):
-            failing_func()
-
-        # Should log error with duration
-        assert mock_logger.error.called
 
 
 class TestAuditLogging:
@@ -420,59 +286,6 @@ class TestMetricsCollector:
         key = MetricsCollector._build_key('metric', None)
 
         assert key == 'metric'
-
-
-class TestRequestIDGeneration:
-    """Test request ID generation."""
-
-    def test_generate_request_id(self):
-        """Test request ID generation."""
-        request_id = generate_request_id()
-
-        assert isinstance(request_id, str)
-        assert len(request_id) > 20  # UUID format
-
-    def test_generate_request_id_unique(self):
-        """Test request IDs are unique."""
-        id1 = generate_request_id()
-        id2 = generate_request_id()
-
-        assert id1 != id2
-
-
-class TestRequestIDMiddleware:
-    """Test request ID middleware."""
-
-    def test_request_id_middleware_setup(self, app):
-        """Test request ID middleware is set up correctly."""
-        request_id_middleware(app)
-
-        # Check that before_request and after_request handlers were added
-        assert len(app.before_request_funcs) > 0
-        assert len(app.after_request_funcs) > 0
-
-    def test_request_id_middleware_generates_id(self, app):
-        """Test middleware generates request ID."""
-        request_id_middleware(app)
-
-        with app.test_request_context():
-            from flask import g
-            for func in app.before_request_funcs[None]:
-                func()
-
-            assert hasattr(g, 'request_id')
-            assert len(g.request_id) > 20
-
-    def test_request_id_middleware_uses_existing_id(self, app):
-        """Test middleware uses existing X-Request-ID header."""
-        request_id_middleware(app)
-
-        with app.test_request_context(headers={'X-Request-ID': 'existing_id_123'}):
-            from flask import g
-            for func in app.before_request_funcs[None]:
-                func()
-
-            assert g.request_id == 'existing_id_123'
 
 
 class TestLogException:

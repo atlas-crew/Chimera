@@ -6,13 +6,9 @@ and audit event logging for the demo application.
 """
 
 import logging
-import time
 import json
 from datetime import datetime
-from typing import Any, Dict, Optional, Callable
-from functools import wraps
-from flask import request, g, has_request_context
-from werkzeug.exceptions import HTTPException
+from typing import Any, Dict, Optional
 
 
 # Configure structured logging
@@ -40,23 +36,9 @@ class StructuredFormatter(logging.Formatter):
             'message': record.getMessage()
         }
 
-        # Add exception info if present
         if record.exc_info:
             log_data['exception'] = self.formatException(record.exc_info)
 
-        # Add request context if available
-        if has_request_context():
-            log_data['request'] = {
-                'method': request.method,
-                'path': request.path,
-                'remote_addr': request.remote_addr
-            }
-
-            # Add request ID if set
-            if hasattr(g, 'request_id'):
-                log_data['request_id'] = g.request_id
-
-        # Add any extra fields from record
         if hasattr(record, 'extra'):
             log_data.update(record.extra)
 
@@ -105,149 +87,6 @@ def setup_logging(
 logger = setup_logging()
 
 
-def log_request(
-    include_headers: bool = False,
-    include_body: bool = False,
-    max_body_size: int = 1024
-):
-    """
-    Decorator to log HTTP requests and responses.
-
-    Args:
-        include_headers: If True, log request headers
-        include_body: If True, log request body
-        max_body_size: Maximum body size to log (bytes)
-
-    Returns:
-        Decorated function
-
-    Example:
-        @app.route('/api/users')
-        @log_request(include_body=True)
-        def list_users():
-            ...
-    """
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            start_time = time.time()
-
-            # Log request
-            log_data = {
-                'event': 'request_started',
-                'method': request.method,
-                'path': request.path,
-                'remote_addr': request.remote_addr,
-                'user_agent': request.user_agent.string if request.user_agent else None
-            }
-
-            if include_headers:
-                log_data['headers'] = dict(request.headers)
-
-            if include_body and request.data:
-                body_size = len(request.data)
-                if body_size <= max_body_size:
-                    try:
-                        if request.is_json:
-                            log_data['body'] = request.get_json()
-                        else:
-                            log_data['body'] = request.data.decode('utf-8', errors='ignore')
-                    except Exception:
-                        log_data['body'] = '<unable to decode>'
-                else:
-                    log_data['body'] = f'<body too large: {body_size} bytes>'
-
-            logger.info('Request', extra=log_data)
-
-            # Execute endpoint
-            try:
-                response = f(*args, **kwargs)
-                duration = time.time() - start_time
-
-                # Log response
-                status_code = 200
-                if isinstance(response, tuple):
-                    status_code = response[1] if len(response) > 1 else 200
-
-                logger.info('Request completed', extra={
-                    'event': 'request_completed',
-                    'method': request.method,
-                    'path': request.path,
-                    'status_code': status_code,
-                    'duration_ms': round(duration * 1000, 2)
-                })
-
-                return response
-
-            except Exception as e:
-                duration = time.time() - start_time
-
-                # Log error
-                logger.error('Request failed', extra={
-                    'event': 'request_failed',
-                    'method': request.method,
-                    'path': request.path,
-                    'error': str(e),
-                    'duration_ms': round(duration * 1000, 2)
-                }, exc_info=True)
-
-                raise
-
-        return wrapper
-    return decorator
-
-
-def track_performance(operation_name: Optional[str] = None):
-    """
-    Decorator to track performance metrics for operations.
-
-    Args:
-        operation_name: Name of the operation (defaults to function name)
-
-    Returns:
-        Decorated function
-
-    Example:
-        @track_performance('database_query')
-        def get_users():
-            ...
-    """
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            op_name = operation_name or f.__name__
-            start_time = time.time()
-
-            try:
-                result = f(*args, **kwargs)
-                duration = time.time() - start_time
-
-                logger.info('Performance metric', extra={
-                    'event': 'performance_metric',
-                    'operation': op_name,
-                    'duration_ms': round(duration * 1000, 2),
-                    'success': True
-                })
-
-                return result
-
-            except Exception as e:
-                duration = time.time() - start_time
-
-                logger.error('Performance metric', extra={
-                    'event': 'performance_metric',
-                    'operation': op_name,
-                    'duration_ms': round(duration * 1000, 2),
-                    'success': False,
-                    'error': str(e)
-                })
-
-                raise
-
-        return wrapper
-    return decorator
-
-
 def log_audit_event(
     event_type: str,
     user_id: Optional[str] = None,
@@ -292,19 +131,6 @@ def log_audit_event(
     if details:
         audit_data['details'] = details
 
-    # Add request context if available
-    if has_request_context():
-        audit_data['request'] = {
-            'method': request.method,
-            'path': request.path,
-            'remote_addr': request.remote_addr,
-            'user_agent': request.user_agent.string if request.user_agent else None
-        }
-
-        if hasattr(g, 'request_id'):
-            audit_data['request_id'] = g.request_id
-
-    # Log at appropriate level
     log_level = getattr(logging, severity.upper(), logging.INFO)
     logger.log(log_level, f"Audit: {event_type}", extra=audit_data)
 
@@ -341,18 +167,6 @@ def log_security_event(
 
     if details:
         security_data['details'] = details
-
-    # Add request context
-    if has_request_context():
-        security_data['request'] = {
-            'method': request.method,
-            'path': request.path,
-            'remote_addr': request.remote_addr,
-            'headers': {
-                'user_agent': request.user_agent.string if request.user_agent else None,
-                'referer': request.referrer
-            }
-        }
 
     log_level = getattr(logging, severity.upper(), logging.WARNING)
     logger.log(log_level, f"Security: {event_type}", extra=security_data)
@@ -448,41 +262,6 @@ class MetricsCollector:
 metrics = MetricsCollector()
 
 
-def generate_request_id() -> str:
-    """
-    Generate a unique request ID for tracing.
-
-    Returns:
-        Request ID string
-    """
-    import uuid
-    return str(uuid.uuid4())
-
-
-def request_id_middleware(app):
-    """
-    Middleware to add request IDs to all requests.
-
-    Args:
-        app: Flask application instance
-
-    Example:
-        from app.utils.monitoring import request_id_middleware
-        request_id_middleware(app)
-    """
-    @app.before_request
-    def before_request():
-        """Generate and store request ID."""
-        g.request_id = request.headers.get('X-Request-ID', generate_request_id())
-
-    @app.after_request
-    def after_request(response):
-        """Add request ID to response headers."""
-        if hasattr(g, 'request_id'):
-            response.headers['X-Request-ID'] = g.request_id
-        return response
-
-
 def log_exception(
     exception: Exception,
     context: Optional[Dict[str, Any]] = None
@@ -503,8 +282,9 @@ def log_exception(
     if context:
         error_data['context'] = context
 
-    if isinstance(exception, HTTPException):
-        error_data['status_code'] = exception.code
+    status_code = getattr(exception, 'status_code', None) or getattr(exception, 'code', None)
+    if status_code is not None:
+        error_data['status_code'] = status_code
         logger.warning('HTTP exception', extra=error_data)
     else:
         logger.error('Exception occurred', extra=error_data, exc_info=True)
