@@ -213,15 +213,21 @@ def _finalize_response(
 def _get_starlette_request(
     args: tuple[Any, ...], kwargs: dict[str, Any]
 ) -> StarletteRequest | None:
-    if StarletteRequest is None:
-        return None
+    candidates = list(args) + list(kwargs.values())
 
-    for value in args:
-        if isinstance(value, StarletteRequest):
-            return value
+    if StarletteRequest is not None:
+        for value in candidates:
+            if isinstance(value, StarletteRequest):
+                return value
 
-    for value in kwargs.values():
-        if isinstance(value, StarletteRequest):
+    # Accept duck-typed adapters (e.g. routing.FlaskRequestAdapter used by
+    # the Flask compat shim) that expose the .url.path / .headers surface
+    # _finalize_response actually consumes. Without this, async hotpatch
+    # routes invoked from the WSGI side fall through to make_response()
+    # against a Starlette JSONResponse, which Flask can't unwrap.
+    for value in candidates:
+        url = getattr(value, "url", None)
+        if url is not None and hasattr(url, "path") and hasattr(value, "headers"):
             return value
 
     return None
