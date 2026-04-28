@@ -187,11 +187,11 @@ def create_app(config=None):
     register_error_handlers(app)
 
     # Import and register blueprints.
-    # NOTE: every blueprint except auth (and conditional database_vulnerable)
-    # is now Starlette — see app/asgi.py. During the transition the migrated
-    # routers are mirrored back into Flask via register_flask_compat_routes
-    # so WSGI callers keep working until the uvicorn cutover (task-16.8).
-    from app.blueprints.auth import auth_bp
+    # NOTE: every blueprint (apart from conditional database_vulnerable) is now
+    # Starlette — see app/asgi.py. During the transition the migrated routers
+    # are mirrored back into Flask via register_flask_compat_routes so WSGI
+    # callers keep working until the uvicorn cutover (task-16.8).
+    from app.blueprints.auth import auth_router
     from app.blueprints.banking import banking_router
     from app.blueprints.mobile import mobile_router
     from app.blueprints.healthcare import healthcare_router
@@ -223,9 +223,9 @@ def create_app(config=None):
     # Initialize Traffic Recorder
     TrafficRecorder(app)
 
-    # Register remaining Flask blueprints while migrated routes stay mirrored via compat adapters.
-    app.register_blueprint(auth_bp)
-
+    # All Tier 1-4 routers are mirrored back into Flask via compat adapters
+    # until the uvicorn cutover (task-16.8) flips traffic to ASGI directly.
+    register_flask_compat_routes(app, auth_router, endpoint_prefix="auth")
     register_flask_compat_routes(app, admin_router, endpoint_prefix="admin")
     register_flask_compat_routes(app, attack_sim_router, endpoint_prefix="attack_sim")
     register_flask_compat_routes(app, government_router, endpoint_prefix="government")

@@ -1,9 +1,8 @@
 """
 Auth blueprint.
 """
+from app.routing import DecoratorRouter as Router
 
-from flask import Blueprint
-
-auth_bp = Blueprint('auth', __name__)
+auth_router = Router(routes=[])
 
 from . import routes

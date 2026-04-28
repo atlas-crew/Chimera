@@ -3,8 +3,8 @@ Routes for auth endpoints.
 WARNING: This code contains intentional vulnerabilities for WAF testing purposes.
 DO NOT use in production environments.
 """
-
-from flask import request, jsonify, render_template_string, session
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from datetime import datetime, timedelta
 import uuid
 import random
@@ -13,13 +13,13 @@ import time
 import hashlib
 
 from app.config import app_config
-import hmac
+from app.routing import safe_json
 import base64
 import os
 import secrets
 import jwt as pyjwt
 
-from . import auth_bp
+from . import auth_router
 from app.models import *
 
 # ============================================================================
@@ -45,7 +45,7 @@ def generate_weak_token():
     # Predictable token in full mode
     return hashlib.md5(str(time.time()).encode()).hexdigest()
 
-def generate_jwt(user_id, username, expires_in=3600):
+def generate_jwt(request, user_id, username, expires_in=3600):
     """Generate JWT token with intentional vulnerabilities"""
     payload = {
         'user_id': user_id,
@@ -117,10 +117,10 @@ def timing_attack_user_enum(email):
 # CORE AUTH ENDPOINTS
 # ============================================================================
 
-@auth_bp.route('/api/v1/auth/methods')
-def auth_methods():
+@auth_router.route('/api/v1/auth/methods')
+async def auth_methods(request: Request):
     """Authentication methods discovery"""
-    return jsonify({
+    return JSONResponse({
         'supported_methods': [
             'password',
             'mfa_sms',
@@ -133,8 +133,8 @@ def auth_methods():
     })
 
 
-@auth_bp.route('/api/v1/auth/login', methods=['POST'])
-def auth_login():
+@auth_router.route('/api/v1/auth/login', methods=['POST'])
+async def auth_login(request: Request):
     """
     Primary login endpoint
     VULNERABILITIES:
@@ -192,29 +192,29 @@ def auth_login():
       401:
         description: Invalid credentials
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     username = data.get('username', '')
     password = data.get('password', '')
 
     if not username or not password:
-        return jsonify({'error': 'Username and password required'}), 400
+        return JSONResponse({'error': 'Username and password required'}, status_code = 400)
 
     # VULNERABILITY: SQL injection check (full mode only)
     sqli_result = vulnerable_sql_check(username, password)
     if sqli_result:
-        session['user_id'] = sqli_result['user_id']
-        session['username'] = sqli_result['username']
-        session['role'] = sqli_result['role']
+        request.session['user_id'] = sqli_result['user_id']
+        request.session['username'] = sqli_result['username']
+        request.session['role'] = sqli_result['role']
 
-        token = generate_jwt(sqli_result['user_id'], sqli_result['username'])
+        token = generate_jwt(request, sqli_result['user_id'], sqli_result['username'])
 
-        return jsonify({
+        return JSONResponse({
             'success': True,
             'message': 'Login successful',
             'token': token,
             'user': sqli_result,
             'vulnerability': 'SQL Injection bypassed authentication'
-        }), 200
+        }, status_code = 200)
 
     # Normal authentication flow
     user = get_user_by_identifier(username)
@@ -227,21 +227,21 @@ def auth_login():
             time.sleep(0.05)
 
     if not user:
-        return jsonify({'error': 'Invalid credentials'}), 401
+        return JSONResponse({'error': 'Invalid credentials'}, status_code = 401)
 
     # Check password
     password_hash = weak_hash_password(password)
     if user.get('password_hash') != password_hash:
-        return jsonify({'error': 'Invalid credentials'}), 401
+        return JSONResponse({'error': 'Invalid credentials'}, status_code = 401)
 
     # Generate session
     session_id = generate_weak_token()
-    session['user_id'] = user.get('user_id')
-    session['username'] = user.get('username')
-    session['session_id'] = session_id
+    request.session['user_id'] = user.get('user_id')
+    request.session['username'] = user.get('username')
+    request.session['session_id'] = session_id
 
     # Generate JWT
-    token = generate_jwt(user.get('user_id'), user.get('username'))
+    token = generate_jwt(request, user.get('user_id'), user.get('username'))
 
     # Check if MFA is required
     if user.get('mfa_enabled'):
@@ -254,13 +254,13 @@ def auth_login():
                 'attempts': 0
             }
 
-        return jsonify({
+        return JSONResponse({
             'mfa_required': True,
             'challenge_id': challenge_id,
             'method': user.get('mfa_method', 'sms')
-        }), 200
+        }, status_code = 200)
 
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'message': 'Login successful',
         'token': token,
@@ -271,42 +271,42 @@ def auth_login():
             'email': user.get('email'),
             'role': user.get('role', 'user')
         }
-    }), 200
+    }, status_code = 200)
 
 
-@auth_bp.route('/api/v1/auth/delete', methods=['POST'])
-def auth_delete():
+@auth_router.route('/api/v1/auth/delete', methods=['POST'])
+async def auth_delete(request: Request):
     """
     User account deletion (Right to be Forgotten).
     VULNERABILITY: Residual Data, Missing Authorization
     """
-    user_id = session.get('user_id')
-    data = request.get_json() or {}
+    user_id = request.session.get('user_id')
+    data = await safe_json(request)
     
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'message': 'Account deletion request received and processed.',
         'user_id': user_id,
         'note': 'Your data will be removed from all primary systems within 30 days.'
-    }), 200
+    }, status_code = 200)
 
 
-@auth_bp.route('/api/v1/auth/logout', methods=['POST'])
-def auth_logout():
+@auth_router.route('/api/v1/auth/logout', methods=['POST'])
+async def auth_logout(request: Request):
     """Session termination endpoint"""
-    user_id = session.get('user_id')
+    user_id = request.session.get('user_id')
 
     # Clear session
-    session.clear()
+    request.session.clear()
 
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'message': 'Logged out successfully'
-    }), 200
+    }, status_code = 200)
 
 
-@auth_bp.route('/api/v1/auth/register', methods=['POST'])
-def auth_register_v1():
+@auth_router.route('/api/v1/auth/register', methods=['POST'])
+async def auth_register_v1(request: Request):
     """
     User registration endpoint
     VULNERABILITIES:
@@ -314,29 +314,29 @@ def auth_register_v1():
     - No rate limiting
     - User enumeration
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     username = data.get('username', '').strip()
     email = data.get('email', '').strip().lower()
     password = data.get('password', '')
     name = data.get('name', '').strip()
 
     if not username or not email or not password:
-        return jsonify({'error': 'Username, email, and password required'}), 400
+        return JSONResponse({'error': 'Username, email, and password required'}, status_code = 400)
 
     # VULNERABILITY: User enumeration - specific error messages
     if get_demo_mode() == 'full':
         if user_exists_by_username(username):
-            return jsonify({'error': 'Username already exists'}), 409
+            return JSONResponse({'error': 'Username already exists'}, status_code = 409)
         if user_exists_by_email(email):
-            return jsonify({'error': 'Email already registered'}), 409
+            return JSONResponse({'error': 'Email already registered'}, status_code = 409)
     else:
         # Better: generic message
         if user_exists_by_username(username) or user_exists_by_email(email):
-            return jsonify({'error': 'User already exists'}), 409
+            return JSONResponse({'error': 'User already exists'}, status_code = 409)
 
     # VULNERABILITY: Weak password validation (only in full mode)
     if get_demo_mode() == 'strict' and len(password) < 8:
-        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+        return JSONResponse({'error': 'Password must be at least 8 characters'}, status_code = 400)
 
     # Create new user
     user_id = str(uuid.uuid4())
@@ -353,16 +353,16 @@ def auth_register_v1():
         'mfa_enabled': False
     })
 
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'message': 'User registered successfully',
         'user_id': user_id,
         'username': username
-    }), 201
+    }, status_code = 201)
 
 
-@auth_bp.route('/api/v1/auth/forgot', methods=['POST'])
-def auth_forgot():
+@auth_router.route('/api/v1/auth/forgot', methods=['POST'])
+async def auth_forgot(request: Request):
     """
     Password reset initiation
     VULNERABILITIES:
@@ -370,11 +370,11 @@ def auth_forgot():
     - User enumeration via timing
     - No rate limiting
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     email = data.get('email', '').strip().lower()
 
     if not email:
-        return jsonify({'error': 'Email required'}), 400
+        return JSONResponse({'error': 'Email required'}, status_code = 400)
 
     # VULNERABILITY: Timing attack for user enumeration
     timing_attack_user_enum(email)
@@ -384,7 +384,7 @@ def auth_forgot():
 
     # VULNERABILITY: In full mode, reveal if user exists
     if get_demo_mode() == 'full' and not user:
-        return jsonify({'error': 'Email not found'}), 404
+        return JSONResponse({'error': 'Email not found'}, status_code = 404)
 
     if user:
         # Generate reset token
@@ -403,151 +403,151 @@ def auth_forgot():
                 'used': False
             }
 
-        return jsonify({
+        return JSONResponse({
             'success': True,
             'message': 'Password reset email sent',
             'reset_token': reset_token if get_demo_mode() == 'full' else None  # Leak token in full mode
-        }), 200
+        }, status_code = 200)
 
     # Generic response to prevent enumeration (strict mode)
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'message': 'If email exists, password reset link has been sent'
-    }), 200
+    }, status_code = 200)
 
 
-@auth_bp.route('/api/v1/auth/reset', methods=['POST'])
-def auth_reset():
+@auth_router.route('/api/v1/auth/reset', methods=['POST'])
+async def auth_reset(request: Request):
     """
     Password reset completion
     VULNERABILITIES:
     - No token expiration check in full mode
     - Weak password validation
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     reset_token = data.get('reset_token', '')
     new_password = data.get('new_password', '')
 
     if not reset_token or not new_password:
-        return jsonify({'error': 'Reset token and new password required'}), 400
+        return JSONResponse({'error': 'Reset token and new password required'}, status_code = 400)
 
     # Check token
     with password_reset_requests_lock:
         reset_req = password_reset_requests.get(reset_token)
         if not reset_req:
-            return jsonify({'error': 'Invalid reset token'}), 400
+            return JSONResponse({'error': 'Invalid reset token'}, status_code = 400)
 
         if reset_req.get('used'):
-            return jsonify({'error': 'Reset token already used'}), 400
+            return JSONResponse({'error': 'Reset token already used'}, status_code = 400)
 
         # VULNERABILITY: No expiration check in full mode
         if get_demo_mode() == 'strict':
             expires_at = datetime.fromisoformat(reset_req.get('expires_at'))
             if datetime.utcnow() > expires_at:
-                return jsonify({'error': 'Reset token expired'}), 400
+                return JSONResponse({'error': 'Reset token expired'}, status_code = 400)
 
         # Update password
         user_id = reset_req.get('user_id')
         if not update_user(user_id, {'password_hash': weak_hash_password(new_password)}):
-            return jsonify({'error': 'User not found'}), 404
+            return JSONResponse({'error': 'User not found'}, status_code = 404)
 
         reset_req['used'] = True
 
-        return jsonify({
+        return JSONResponse({
             'success': True,
             'message': 'Password reset successful'
-        }), 200
+        }, status_code = 200)
 
 
-@auth_bp.route('/api/v1/auth/verify', methods=['POST'])
-def auth_verify():
+@auth_router.route('/api/v1/auth/verify', methods=['POST'])
+async def auth_verify(request: Request):
     """
     Email/phone verification
     VULNERABILITIES:
     - Predictable verification codes
     - No rate limiting on attempts
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     user_id = data.get('user_id', '')
     code = data.get('code', '')
 
     if not user_id or not code:
-        return jsonify({'error': 'User ID and verification code required'}), 400
+        return JSONResponse({'error': 'User ID and verification code required'}, status_code = 400)
 
     # In demo, accept any 6-digit code in full mode
     if get_demo_mode() == 'full' and len(code) == 6 and code.isdigit():
         if update_user(user_id, {'verified': True}):
-            return jsonify({
+            return JSONResponse({
                 'success': True,
                 'message': 'Verification successful'
-            }), 200
+            }, status_code = 200)
 
-    return jsonify({'error': 'Invalid verification code'}), 400
+    return JSONResponse({'error': 'Invalid verification code'}, status_code = 400)
 
 
-@auth_bp.route('/api/v1/auth/refresh', methods=['POST'])
-def auth_refresh_v1():
+@auth_router.route('/api/v1/auth/refresh', methods=['POST'])
+async def auth_refresh_v1(request: Request):
     """
     Token refresh endpoint
     VULNERABILITIES:
     - Accepts expired tokens in full mode
     - No token rotation
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     refresh_token = data.get('refresh_token', '')
 
     if not refresh_token:
-        return jsonify({'error': 'Refresh token required'}), 400
+        return JSONResponse({'error': 'Refresh token required'}, status_code = 400)
 
     # Verify refresh token
     with refresh_tokens_db_lock:
         token_data = refresh_tokens_db.get(refresh_token)
 
     if not token_data:
-        return jsonify({'error': 'Invalid refresh token'}), 401
+        return JSONResponse({'error': 'Invalid refresh token'}, status_code = 401)
 
     # VULNERABILITY: No expiration check in full mode
     if get_demo_mode() == 'strict':
         expires_at = datetime.fromisoformat(token_data.get('expires_at'))
         if datetime.utcnow() > expires_at:
-            return jsonify({'error': 'Refresh token expired'}), 401
+            return JSONResponse({'error': 'Refresh token expired'}, status_code = 401)
 
     user_id = token_data.get('user_id')
     user = get_user_by_id(user_id)
 
     if not user:
-        return jsonify({'error': 'User not found'}), 404
+        return JSONResponse({'error': 'User not found'}, status_code = 404)
 
     # Generate new access token
-    access_token = generate_jwt(user_id, user.get('username'))
+    access_token = generate_jwt(request, user_id, user.get('username'))
 
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'access_token': access_token,
         'token_type': 'Bearer',
         'expires_in': 3600
-    }), 200
+    }, status_code = 200)
 
 
-@auth_bp.route('/api/v1/auth/status', methods=['GET'])
-def auth_status():
+@auth_router.route('/api/v1/auth/status', methods=['GET'])
+async def auth_status(request: Request):
     """Authentication status check"""
-    user_id = session.get('user_id')
+    user_id = request.session.get('user_id')
 
     if not user_id:
-        return jsonify({
+        return JSONResponse({
             'authenticated': False,
             'message': 'Not authenticated'
-        }), 200
+        }, status_code = 200)
 
     user = get_user_by_id(user_id)
     if not user:
-        return jsonify({
+        return JSONResponse({
             'authenticated': False,
             'message': 'User not found'
-        }), 200
+        }, status_code = 200)
 
-    return jsonify({
+    return JSONResponse({
         'authenticated': True,
         'user': {
             'user_id': user.get('user_id'),
@@ -555,31 +555,31 @@ def auth_status():
             'email': user.get('email'),
             'role': user.get('role', 'user')
         }
-    }), 200
+    }, status_code = 200)
 
 
 # ============================================================================
 # MFA ENDPOINTS
 # ============================================================================
 
-@auth_bp.route('/api/v1/auth/mfa/enable', methods=['POST'])
-def auth_mfa_enable():
+@auth_router.route('/api/v1/auth/mfa/enable', methods=['POST'])
+async def auth_mfa_enable(request: Request):
     """
     Enable 2FA for user
     VULNERABILITIES:
     - No validation of user session
     - Weak TOTP secret generation
     """
-    user_id = session.get('user_id')
+    user_id = request.session.get('user_id')
     if not user_id:
-        return jsonify({'error': 'Authentication required'}), 401
+        return JSONResponse({'error': 'Authentication required'}, status_code = 401)
 
-    data = request.get_json() or {}
+    data = await safe_json(request)
     method = data.get('method', 'totp')  # totp, sms, email
 
     user = get_user_by_id(user_id)
     if not user:
-        return jsonify({'error': 'User not found'}), 404
+        return JSONResponse({'error': 'User not found'}, status_code = 404)
 
     # Generate TOTP secret
     if get_demo_mode() == 'full':
@@ -593,36 +593,36 @@ def auth_mfa_enable():
         'mfa_method': method,
         'mfa_secret': totp_secret
     }):
-        return jsonify({'error': 'User not found'}), 404
+        return JSONResponse({'error': 'User not found'}, status_code = 404)
 
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'message': 'MFA enabled',
         'method': method,
         'secret': totp_secret,  # In production, only show during setup
         'qr_code_url': f'otpauth://totp/Demo:{user.get("email")}?secret={totp_secret}&issuer=Demo'
-    }), 200
+    }, status_code = 200)
 
 
-@auth_bp.route('/api/v1/auth/mfa/verify', methods=['POST'])
-def auth_mfa_verify():
+@auth_router.route('/api/v1/auth/mfa/verify', methods=['POST'])
+async def auth_mfa_verify(request: Request):
     """
     Verify MFA code
     VULNERABILITIES:
     - No rate limiting
     - Accepts recent codes in full mode
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     challenge_id = data.get('challenge_id', '')
     code = data.get('code', '')
 
     if not challenge_id or not code:
-        return jsonify({'error': 'Challenge ID and code required'}), 400
+        return JSONResponse({'error': 'Challenge ID and code required'}, status_code = 400)
 
     with mfa_challenges_db_lock:
         challenge = mfa_challenges_db.get(challenge_id)
         if not challenge:
-            return jsonify({'error': 'Invalid challenge'}), 400
+            return JSONResponse({'error': 'Invalid challenge'}, status_code = 400)
 
         # VULNERABILITY: No rate limiting in full mode
         challenge['attempts'] += 1
@@ -636,7 +636,7 @@ def auth_mfa_verify():
             del mfa_challenges_db[challenge_id]
 
     if too_many:
-        return jsonify({'error': 'Too many attempts'}), 429
+        return JSONResponse({'error': 'Too many attempts'}, status_code = 429)
 
     # Verify code
     if matches:
@@ -644,12 +644,12 @@ def auth_mfa_verify():
 
         if user:
             # Complete login
-            session['user_id'] = user_id
-            session['username'] = user.get('username')
+            request.session['user_id'] = user_id
+            request.session['username'] = user.get('username')
 
-            token = generate_jwt(user_id, user.get('username'))
+            token = generate_jwt(request, user_id, user.get('username'))
 
-            return jsonify({
+            return JSONResponse({
                 'success': True,
                 'message': 'MFA verification successful',
                 'token': token,
@@ -658,25 +658,25 @@ def auth_mfa_verify():
                     'username': user.get('username'),
                     'email': user.get('email')
                 }
-            }), 200
+            }, status_code = 200)
 
-    return jsonify({'error': 'Invalid MFA code'}), 401
+    return JSONResponse({'error': 'Invalid MFA code'}, status_code = 401)
 
 
-@auth_bp.route('/api/v1/auth/mfa/backup', methods=['POST'])
-def auth_mfa_backup():
+@auth_router.route('/api/v1/auth/mfa/backup', methods=['POST'])
+async def auth_mfa_backup(request: Request):
     """
     Generate MFA backup codes
     VULNERABILITIES:
     - Predictable backup codes in full mode
     """
-    user_id = session.get('user_id')
+    user_id = request.session.get('user_id')
     if not user_id:
-        return jsonify({'error': 'Authentication required'}), 401
+        return JSONResponse({'error': 'Authentication required'}, status_code = 401)
 
     user = get_user_by_id(user_id)
     if not user:
-        return jsonify({'error': 'User not found'}), 404
+        return JSONResponse({'error': 'User not found'}, status_code = 404)
 
     # Generate backup codes
     backup_codes = []
@@ -689,47 +689,47 @@ def auth_mfa_backup():
         backup_codes.append(code)
 
     if not update_user(user_id, {'backup_codes': backup_codes}):
-        return jsonify({'error': 'User not found'}), 404
+        return JSONResponse({'error': 'User not found'}, status_code = 404)
 
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'backup_codes': backup_codes
-    }), 200
+    }, status_code = 200)
 
 
 # ============================================================================
 # OAUTH/SOCIAL ENDPOINTS
 # ============================================================================
 
-@auth_bp.route('/api/v1/auth/oauth/authorize', methods=['GET'])
-def oauth_authorize_v1():
+@auth_router.route('/api/v1/auth/oauth/authorize', methods=['GET'])
+async def oauth_authorize_v1(request: Request):
     """
     OAuth authorization endpoint
     VULNERABILITIES:
     - No redirect URI validation in full mode
     - State parameter not enforced
     """
-    client_id = request.args.get('client_id', '')
-    redirect_uri = request.args.get('redirect_uri', '')
-    response_type = request.args.get('response_type', 'code')
-    state = request.args.get('state', '')
-    scope = request.args.get('scope', 'read')
+    client_id = request.query_params.get('client_id', '')
+    redirect_uri = request.query_params.get('redirect_uri', '')
+    response_type = request.query_params.get('response_type', 'code')
+    state = request.query_params.get('state', '')
+    scope = request.query_params.get('scope', 'read')
 
     if not client_id or not redirect_uri:
-        return jsonify({'error': 'client_id and redirect_uri required'}), 400
+        return JSONResponse({'error': 'client_id and redirect_uri required'}, status_code = 400)
 
     # VULNERABILITY: No redirect URI validation in full mode
     if get_demo_mode() == 'strict':
         # Validate redirect_uri against registered clients
         valid_uris = ['http://localhost:3000/callback', 'https://demo.com/callback']
         if redirect_uri not in valid_uris:
-            return jsonify({'error': 'Invalid redirect_uri'}), 400
+            return JSONResponse({'error': 'Invalid redirect_uri'}, status_code = 400)
 
     # Generate authorization code
     auth_code = generate_weak_token()
 
     # Store authorization
-    session['oauth_auth'] = {
+    request.session['oauth_auth'] = {
         'client_id': client_id,
         'redirect_uri': redirect_uri,
         'code': auth_code,
@@ -738,61 +738,61 @@ def oauth_authorize_v1():
         'created_at': datetime.utcnow().isoformat()
     }
 
-    return jsonify({
+    return JSONResponse({
         'authorization_code': auth_code,
         'redirect_uri': redirect_uri,
         'state': state
-    }), 200
+    }, status_code = 200)
 
 
-@auth_bp.route('/api/v1/auth/oauth/callback', methods=['POST'])
-def oauth_callback_v1():
+@auth_router.route('/api/v1/auth/oauth/callback', methods=['POST'])
+async def oauth_callback_v1(request: Request):
     """
     OAuth callback endpoint
     VULNERABILITIES:
     - No state validation in full mode
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     code = data.get('code', '')
     state = data.get('state', '')
 
     if not code:
-        return jsonify({'error': 'Authorization code required'}), 400
+        return JSONResponse({'error': 'Authorization code required'}, status_code = 400)
 
-    oauth_auth = session.get('oauth_auth')
+    oauth_auth = request.session.get('oauth_auth')
     if not oauth_auth or oauth_auth.get('code') != code:
-        return jsonify({'error': 'Invalid authorization code'}), 400
+        return JSONResponse({'error': 'Invalid authorization code'}, status_code = 400)
 
     # VULNERABILITY: No state validation in full mode
     if get_demo_mode() == 'strict':
         if state != oauth_auth.get('state'):
-            return jsonify({'error': 'Invalid state parameter'}), 400
+            return JSONResponse({'error': 'Invalid state parameter'}, status_code = 400)
 
     # Generate access token
-    user_id = session.get('user_id', 'demo-user')
-    access_token = generate_jwt(user_id, 'oauth_user')
+    user_id = request.session.get('user_id', 'demo-user')
+    access_token = generate_jwt(request, user_id, 'oauth_user')
 
-    return jsonify({
+    return JSONResponse({
         'access_token': access_token,
         'token_type': 'Bearer',
         'expires_in': 3600,
         'scope': oauth_auth.get('scope')
-    }), 200
+    }, status_code = 200)
 
 
-@auth_bp.route('/api/v1/auth/social/<provider>', methods=['POST'])
-def social_login(provider):
+@auth_router.route('/api/v1/auth/social/<provider>', methods=['POST'])
+async def social_login(request: Request, provider):
     """
     Social login endpoint
     VULNERABILITIES:
     - No token validation
     - Accepts any provider
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     access_token = data.get('access_token', '')
 
     if not access_token:
-        return jsonify({'error': 'Access token required'}), 400
+        return JSONResponse({'error': 'Access token required'}, status_code = 400)
 
     # In demo, accept any token
     user_id = str(uuid.uuid4())
@@ -808,24 +808,24 @@ def social_login(provider):
             'created_at': datetime.utcnow().isoformat()
         })
 
-    token = generate_jwt(user_id, username)
+    token = generate_jwt(request, user_id, username)
 
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'token': token,
         'user': get_user_by_id(user_id)
-    }), 200
+    }, status_code = 200)
 
 
 # ============================================================================
 # SAML ENDPOINTS (Enhanced from existing)
 # ============================================================================
 
-@auth_bp.route('/api/v1/auth/saml/metadata')
-def saml_metadata_v1():
+@auth_router.route('/api/v1/auth/saml/metadata')
+async def saml_metadata_v1(request: Request):
     """SAML metadata endpoint - exposes sensitive configuration"""
     # Intentionally exposes SAML configuration including private keys
-    return jsonify({
+    return JSONResponse({
         'entity_id': 'https://demo.chimera.com/saml',
         'sso_url': 'https://demo.chimera.com/api/v1/auth/saml/login',
         'slo_url': 'https://demo.chimera.com/api/v1/auth/saml/logout',
@@ -845,14 +845,14 @@ MzEfYyjiWA4R4/M2bS1+fWIcPm15j9DP3Xzq9rKjZ7i+FPU4lqVXxQdQ7pjE
     })
 
 
-@auth_bp.route('/api/v1/auth/saml/login', methods=['POST'])
-def saml_login():
+@auth_router.route('/api/v1/auth/saml/login', methods=['POST'])
+async def saml_login(request: Request):
     """
     SAML SSO login initiation
     VULNERABILITIES:
     - No signature validation in full mode
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     relay_state = data.get('RelayState', '')
 
     # Generate SAML request
@@ -866,17 +866,17 @@ def saml_login():
         'destination': 'https://idp.example.com/sso'
     }
 
-    session['saml_request'] = saml_request
+    request.session['saml_request'] = saml_request
 
-    return jsonify({
+    return JSONResponse({
         'saml_request_id': request_id,
         'idp_url': 'https://idp.example.com/sso',
         'relay_state': relay_state
-    }), 200
+    }, status_code = 200)
 
 
-@auth_bp.route('/api/v1/auth/saml/callback', methods=['POST'])
-def saml_callback():
+@auth_router.route('/api/v1/auth/saml/callback', methods=['POST'])
+async def saml_callback(request: Request):
     """
     SAML assertion consumer service
     VULNERABILITIES:
@@ -884,12 +884,12 @@ def saml_callback():
     - XML injection possible
     - Accepts any assertion in full mode
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     saml_response = data.get('SAMLResponse', '')
     relay_state = data.get('RelayState', '')
 
     if not saml_response:
-        return jsonify({'error': 'SAMLResponse required'}), 400
+        return JSONResponse({'error': 'SAMLResponse required'}, status_code = 400)
 
     # VULNERABILITY: No validation in full mode
     if get_demo_mode() == 'full':
@@ -916,33 +916,33 @@ def saml_callback():
                 'created_at': datetime.utcnow().isoformat()
             }
             add_user(user_id, user)
-        session['user_id'] = user_id
-        session['username'] = user.get('username')
+        request.session['user_id'] = user_id
+        request.session['username'] = user.get('username')
 
-        token = generate_jwt(user_id, user.get('username'))
+        token = generate_jwt(request, user_id, user.get('username'))
 
-        return jsonify({
+        return JSONResponse({
             'success': True,
             'token': token,
             'user': user,
             'relay_state': relay_state
-        }), 200
+        }, status_code = 200)
 
-    return jsonify({'error': 'SAML validation not implemented in strict mode'}), 501
+    return JSONResponse({'error': 'SAML validation not implemented in strict mode'}, status_code = 501)
 
 
 # ============================================================================
 # API KEY ENDPOINTS
 # ============================================================================
 
-@auth_bp.route('/api/v1/auth/apikeys', methods=['GET'])
-def auth_apikeys_list():
+@auth_router.route('/api/v1/auth/apikeys', methods=['GET'])
+async def auth_apikeys_list(request: Request):
     """
     List API keys for authenticated user
     """
-    user_id = session.get('user_id')
+    user_id = request.session.get('user_id')
     if not user_id:
-        return jsonify({'error': 'Authentication required'}), 401
+        return JSONResponse({'error': 'Authentication required'}, status_code = 401)
 
     # Get user's API keys
     with api_keys_db_lock:
@@ -963,24 +963,24 @@ def auth_apikeys_list():
                 'expires_at': key_data.get('expires_at')
             })
 
-    return jsonify({
+    return JSONResponse({
         'api_keys': sanitized_keys
-    }), 200
+    }, status_code = 200)
 
 
-@auth_bp.route('/api/v1/auth/apikeys/create', methods=['POST'])
-def auth_apikeys_create():
+@auth_router.route('/api/v1/auth/apikeys/create', methods=['POST'])
+async def auth_apikeys_create(request: Request):
     """
     Create new API key
     VULNERABILITIES:
     - Weak key generation in full mode
     - No rate limiting
     """
-    user_id = session.get('user_id')
+    user_id = request.session.get('user_id')
     if not user_id:
-        return jsonify({'error': 'Authentication required'}), 401
+        return JSONResponse({'error': 'Authentication required'}, status_code = 401)
 
-    data = request.get_json() or {}
+    data = await safe_json(request)
     name = data.get('name', 'Unnamed Key')
     expires_in_days = data.get('expires_in_days', 90)
 
@@ -1007,71 +1007,71 @@ def auth_apikeys_create():
     with api_keys_db_lock:
         api_keys_db[key_id] = record
 
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'key_id': key_id,
         'api_key': api_key,  # Only shown once
         'name': name,
         'expires_at': expires_at
-    }), 201
+    }, status_code = 201)
 
 
-@auth_bp.route('/api/v1/auth/apikeys/revoke', methods=['POST'])
-def auth_apikeys_revoke():
+@auth_router.route('/api/v1/auth/apikeys/revoke', methods=['POST'])
+async def auth_apikeys_revoke(request: Request):
     """Revoke API key"""
-    user_id = session.get('user_id')
+    user_id = request.session.get('user_id')
     if not user_id:
-        return jsonify({'error': 'Authentication required'}), 401
+        return JSONResponse({'error': 'Authentication required'}, status_code = 401)
 
-    data = request.get_json() or {}
+    data = await safe_json(request)
     key_id = data.get('key_id', '')
 
     if not key_id:
-        return jsonify({'error': 'key_id required'}), 400
+        return JSONResponse({'error': 'key_id required'}, status_code = 400)
 
     with api_keys_db_lock:
         key_data = api_keys_db.get(key_id)
         if not key_data:
-            return jsonify({'error': 'API key not found'}), 404
+            return JSONResponse({'error': 'API key not found'}, status_code = 404)
 
         # Verify ownership
         if key_data.get('user_id') != user_id:
-            return jsonify({'error': 'Unauthorized'}), 403
+            return JSONResponse({'error': 'Unauthorized'}, status_code = 403)
 
         # Revoke key
         key_data['revoked'] = True
         key_data['revoked_at'] = datetime.utcnow().isoformat()
 
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'message': 'API key revoked'
-    }), 200
+    }, status_code = 200)
 
 
 # ============================================================================
 # LEGACY ENDPOINTS (Keep existing routes)
 # ============================================================================
 
-@auth_bp.route('/api/v1/auth/forgot-password', methods=['POST'])
-def auth_forgot_password():
+@auth_router.route('/api/v1/auth/forgot-password', methods=['POST'])
+async def auth_forgot_password(request: Request):
     """Legacy endpoint - redirect to /forgot"""
-    return auth_forgot()
+    return await auth_forgot(request)
 
 
-@auth_bp.route('/api/v1/auth/verify-mfa', methods=['POST'])
-def auth_verify_mfa():
+@auth_router.route('/api/v1/auth/verify-mfa', methods=['POST'])
+async def auth_verify_mfa(request: Request):
     """Legacy endpoint - redirect to /mfa/verify"""
-    return auth_mfa_verify()
+    return await auth_mfa_verify(request)
 
 
-@auth_bp.route('/api/v1/device/register', methods=['POST'])
-def device_register():
+@auth_router.route('/api/v1/device/register', methods=['POST'])
+async def device_register(request: Request):
     """Device binding and registration endpoint"""
-    user_id = session.get('user_id')
+    user_id = request.session.get('user_id')
     if not user_id:
-        return jsonify({'error': 'Authentication required'}), 401
+        return JSONResponse({'error': 'Authentication required'}, status_code = 401)
 
-    data = request.get_json() or {}
+    data = await safe_json(request)
     device_name = data.get('device_name', 'Unknown Device')
     device_type = data.get('device_type', 'mobile')
 
@@ -1086,75 +1086,75 @@ def device_register():
             'last_seen': datetime.utcnow().isoformat()
         }
 
-    return jsonify({
+    return JSONResponse({
         'success': True,
         'device_id': device_id
-    }), 201
+    }, status_code = 201)
 
 
-@auth_bp.route('/api/v1/auth/api-keys', methods=['POST'])
-def auth_api_keys():
+@auth_router.route('/api/v1/auth/api-keys', methods=['POST'])
+async def auth_api_keys(request: Request):
     """Legacy endpoint - redirect to /apikeys/create"""
-    return auth_apikeys_create()
+    return await auth_apikeys_create(request)
 
 
-@auth_bp.route('/api/oauth/authorize')
-def oauth_authorize():
+@auth_router.route('/api/oauth/authorize')
+async def oauth_authorize(request: Request):
     """Legacy OAuth endpoint"""
-    return oauth_authorize_v1()
+    return await oauth_authorize_v1(request)
 
 
-@auth_bp.route('/api/oauth/token', methods=['POST'])
-def oauth_token():
+@auth_router.route('/api/oauth/token', methods=['POST'])
+async def oauth_token(request: Request):
     """Legacy OAuth token endpoint"""
-    data = request.get_json() or {}
+    data = await safe_json(request)
     grant_type = data.get('grant_type', '')
     code = data.get('code', '')
 
     if grant_type == 'authorization_code':
-        return oauth_callback_v1()
+        return await oauth_callback_v1(request)
 
-    return jsonify({'error': 'Unsupported grant_type'}), 400
+    return JSONResponse({'error': 'Unsupported grant_type'}, status_code = 400)
 
 
-@auth_bp.route('/api/auth/register', methods=['POST'])
-def auth_register():
+@auth_router.route('/api/auth/register', methods=['POST'])
+async def auth_register(request: Request):
     """Legacy registration endpoint"""
-    return auth_register_v1()
+    return await auth_register_v1(request)
 
 
-@auth_bp.route('/api/oauth/token/forge', methods=['POST'])
-def oauth_token_forge():
+@auth_router.route('/api/oauth/token/forge', methods=['POST'])
+async def oauth_token_forge(request: Request):
     """
     OAuth token endpoint - vulnerable to token forgery
     VULNERABILITY: Allows arbitrary token generation
     """
-    data = request.get_json() or {}
+    data = await safe_json(request)
     client_id = data.get('client_id', 'unknown')
     username = data.get('username', 'forged_user')
 
     if get_demo_mode() != 'full':
-        return jsonify({'error': 'Endpoint requires DEMO_MODE=full'}), 403
+        return JSONResponse({'error': 'Endpoint requires DEMO_MODE=full'}, status_code = 403)
 
     # VULNERABILITY: Generate token without authentication
     user_id = str(uuid.uuid4())
-    token = generate_jwt(user_id, username, expires_in=86400)
+    token = generate_jwt(request, user_id, username, expires_in=86400)
 
-    return jsonify({
+    return JSONResponse({
         'access_token': token,
         'token_type': 'Bearer',
         'expires_in': 86400,
         'warning': 'Token forged without authentication'
-    }), 200
+    }, status_code = 200)
 
 
-@auth_bp.route('/api/saml/metadata')
-def saml_metadata():
+@auth_router.route('/api/saml/metadata')
+async def saml_metadata(request: Request):
     """Legacy SAML metadata endpoint"""
-    return saml_metadata_v1()
+    return await saml_metadata_v1(request)
 
 
-@auth_bp.route('/api/saml/sso', methods=['POST'])
-def saml_sso():
+@auth_router.route('/api/saml/sso', methods=['POST'])
+async def saml_sso(request: Request):
     """Legacy SAML SSO endpoint"""
-    return saml_login()
+    return await saml_login(request)
