@@ -78,17 +78,19 @@ class CSPMiddleware:
 
 
 # ---------------------------------------------------------------------------
-# Error handlers
+# Compat-shim error handler
 # ---------------------------------------------------------------------------
+# Note: the production exception_handlers used by create_app live in
+# app.error_handlers_asgi (the rich DemoErrorHandler-equivalent). The
+# function below mirrors the lightweight body shape produced by the Flask
+# compat shim (register_flask_compat_routes in app.routing) so parity tests
+# that construct a test Starlette app against the shim contract stay valid.
 
 
 async def http_exception_handler(request: Request, exc: Exception):
-    """Catch-all error handler that mirrors Flask DemoErrorHandler behavior."""
-    from starlette.exceptions import HTTPException
-
+    """Lightweight error handler matching the Flask compat shim's body shape."""
     status_code = getattr(exc, "status_code", 500)
     detail = getattr(exc, "detail", str(exc))
-
     body = build_http_exception_body(
         status_code=status_code,
         detail=detail,
@@ -238,12 +240,17 @@ def create_app(config: dict | None = None) -> Starlette:
     sort_routes_by_specificity(routes)
 
     from app.middleware.traffic_recorder_asgi import TrafficRecorderMiddleware
+    from app.error_handlers_asgi import BodyBufferMiddleware, EXCEPTION_HANDLERS
 
     middleware = [
         # Outermost: TrafficRecorder mirrors Flask's before/after_request hooks,
         # which surround the entire dispatch. Wall-clock duration includes the
         # rest of the middleware stack, matching the WSGI version's semantics.
         Middleware(TrafficRecorderMiddleware),
+        # Stash raw request body so error handlers can leak it (intentional
+        # info-leak parity with the Flask DemoErrorHandler). Must run before
+        # any middleware that consumes the body.
+        Middleware(BodyBufferMiddleware),
         Middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -258,12 +265,7 @@ def create_app(config: dict | None = None) -> Starlette:
         Middleware(CSPMiddleware),
     ]
 
-    from starlette.exceptions import HTTPException
-
-    exception_handlers = {
-        HTTPException: http_exception_handler,
-        Exception: http_exception_handler,
-    }
+    exception_handlers = EXCEPTION_HANDLERS
 
     app = Starlette(
         debug=cfg.debug,
