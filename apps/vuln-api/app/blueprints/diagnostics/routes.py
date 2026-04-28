@@ -3,6 +3,7 @@ import requests
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from . import diagnostics_router
+from app.routing import safe_json
 
 @diagnostics_router.route('/api/v1/diagnostics/ping', methods=['POST'])
 async def ping_host(request: Request):
@@ -10,7 +11,7 @@ async def ping_host(request: Request):
     Network Connectivity Check
     VULNERABILITY: Command Injection (RCE)
     """
-    data = await request.json() or {}
+    data = await safe_json(request)
     host = data.get('host', '8.8.8.8')
 
     # VULNERABILITY: Direct concatenation of user input into shell command
@@ -44,7 +45,7 @@ async def test_webhook(request: Request):
     VULNERABILITY: Server-Side Request Forgery (SSRF)
     """
     if request.method == 'POST':
-        data = await request.json() or {}
+        data = await safe_json(request)
         url = data.get('url', '')
     else:
         url = request.query_params.get('url', '')

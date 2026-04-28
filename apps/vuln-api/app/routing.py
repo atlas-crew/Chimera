@@ -23,6 +23,23 @@ async def _await_coro(coro):
     """Adapter so async_to_sync can drive an already-created coroutine."""
     return await coro
 
+
+async def safe_json(request):
+    """Tolerant JSON body parser matching Flask's `request.get_json() or {}`.
+
+    Starlette's `request.json()` raises `json.JSONDecodeError` on empty or
+    malformed bodies, which surfaces as a 500 from the global error handler.
+    The original Flask handlers used `request.get_json() or {}` — empty body
+    returned None → coerced to {}, malformed raised 400. To preserve the
+    vulnerable-by-design code path on empty bodies (the handler still runs
+    with an empty dict so the exploit fires), restore those semantics here.
+    """
+    try:
+        data = await request.json()
+    except json.JSONDecodeError:
+        return {}
+    return data if data is not None else {}
+
 _PATH_PARAM_RE = re.compile(r"<(?:(?P<converter>[a-zA-Z_][a-zA-Z0-9_]*):)?(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)>")
 _STARLETTE_PATH_PARAM_RE = re.compile(r"{(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)(?::(?P<converter>[a-zA-Z_][a-zA-Z0-9_]*))?}")
 _CONVERTER_MAP = {

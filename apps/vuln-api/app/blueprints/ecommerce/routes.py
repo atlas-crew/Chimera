@@ -11,6 +11,7 @@ import time
 
 from . import ecommerce_router
 from app.models import *
+from app.routing import safe_json
 
 @ecommerce_router.route('/api/products/search')
 async def products_search(request: Request):
@@ -48,14 +49,14 @@ async def vendors_marketplace(request: Request):
 @ecommerce_router.route('/api/vendors/register', methods=['POST'])
 async def vendors_register(request: Request):
     """Vendor registration endpoint"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     vendor_name = data.get('name')
 
 
 @ecommerce_router.route('/api/vendors/documents/upload', methods=['POST'])
 async def vendors_documents_upload(request: Request):
     """Upload vendor documents"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     vendor_id = data.get('vendor_id')
     documents = data.get('documents', [])
 
@@ -63,7 +64,7 @@ async def vendors_documents_upload(request: Request):
 @ecommerce_router.route('/api/vendors/auth/takeover', methods=['POST'])
 async def vendors_auth_takeover(request: Request):
     """Vendor account takeover simulation"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     vendor_id = data.get('vendor_id')
     takeover_vector = data.get('method', 'session_hijack')
 
@@ -71,14 +72,14 @@ async def vendors_auth_takeover(request: Request):
 @ecommerce_router.route('/api/products/listings', methods=['POST'])
 async def products_listings(request: Request):
     """Create new product listings"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     listings = data.get('listings', [])
 
 
 @ecommerce_router.route('/api/reviews/submit', methods=['POST'])
 async def reviews_submit(request: Request):
     """Submit product reviews"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     review_id = f"REV-{uuid.uuid4().hex[:8]}"
     reviews_db.append({
         'review_id': review_id,
@@ -92,7 +93,7 @@ async def reviews_submit(request: Request):
 @ecommerce_router.route('/api/ratings/bulk', methods=['POST'])
 async def ratings_bulk(request: Request):
     """Bulk ratings submission"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     ratings = data.get('ratings', [])
     ratings_db.extend(ratings)
 
@@ -100,7 +101,7 @@ async def ratings_bulk(request: Request):
 @ecommerce_router.route('/api/vendors/inventory/sabotage', methods=['POST'])
 async def vendors_inventory_sabotage(request: Request):
     """Sabotage vendor inventory"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     vendor_id = data.get('vendor_id')
     action = data.get('action', 'zero_out_stock')
 
@@ -108,7 +109,7 @@ async def vendors_inventory_sabotage(request: Request):
 @ecommerce_router.route('/api/vendors/privileges/escalate', methods=['PUT'])
 async def vendors_privileges_escalate(request: Request):
     """Elevate vendor privileges"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     vendor_id = data.get('vendor_id')
     new_privilege = data.get('privilege', 'admin')
 
@@ -116,7 +117,7 @@ async def vendors_privileges_escalate(request: Request):
 @ecommerce_router.route('/api/vendors/backdoor', methods=['POST'])
 async def vendors_backdoor(request: Request):
     """Install backdoor for vendor management"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     vendor_id = data.get('vendor_id')
 
 
@@ -141,7 +142,7 @@ async def vendors_financial_export(request: Request):
 @ecommerce_router.route('/api/inventory/reserve', methods=['POST'])
 async def inventory_reserve(request: Request):
     """Reserve inventory items"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     product_id = data.get('product_id')
     quantity = data.get('quantity', 1)
     duration = data.get('duration_minutes', 15)
@@ -150,7 +151,7 @@ async def inventory_reserve(request: Request):
 @ecommerce_router.route('/api/inventory/check', methods=['POST'])
 async def inventory_check(request: Request):
     """Check inventory availability"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     product_ids = data.get('product_ids', [])
 
 
@@ -161,7 +162,7 @@ async def inventory_check(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/cart/add', methods=['POST'])
 async def v1_cart_add(request: Request):
     """Add item to cart - price/quantity tampering"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     cart_id = f"CART-{uuid.uuid4().hex[:6]}"
     return JSONResponse({
         'cart_id': cart_id,
@@ -176,7 +177,7 @@ async def v1_cart_add(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/cart/checkout', methods=['POST'])
 async def v1_cart_checkout(request: Request):
     """Checkout - race condition / discount abuse"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'cart_id': data.get('cart_id', f"CART-{uuid.uuid4().hex[:6]}"),
         'discount_code': data.get('discount_code'),
@@ -199,7 +200,7 @@ async def v1_cart_details(request: Request, cart_id):
 @ecommerce_router.route('/api/v1/ecommerce/cart/apply-discount', methods=['POST'])
 async def v1_cart_apply_discount(request: Request):
     """Discount stacking abuse"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'codes': data.get('codes', []),
         'total_discount': 0.75,
@@ -210,7 +211,7 @@ async def v1_cart_apply_discount(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/inventory/<item_id>', methods=['PUT'])
 async def v1_inventory_update(request: Request, item_id):
     """Inventory manipulation"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'item_id': item_id,
         'quantity': data.get('quantity'),
@@ -248,7 +249,7 @@ async def v1_products_search(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/inventory/reserve', methods=['POST'])
 async def v1_inventory_reserve(request: Request):
     """Inventory reservation abuse"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'product_id': data.get('product_id'),
         'quantity': data.get('quantity', 1),
@@ -270,7 +271,7 @@ async def v1_pricing_export(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/pricing/override', methods=['PUT'])
 async def v1_pricing_override(request: Request):
     """Pricing override - tampering vulnerability"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'product_id': data.get('product_id'),
         'override_price': data.get('override_price', 0),
@@ -282,7 +283,7 @@ async def v1_pricing_override(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/checkout/complete', methods=['POST'])
 async def v1_checkout_complete(request: Request):
     """Payment bypass"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'order_id': data.get('order_id', f"ORDER-{uuid.uuid4().hex[:6]}"),
         'payment_status': data.get('payment_status', 'paid'),
@@ -294,7 +295,7 @@ async def v1_checkout_complete(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/orders/<order_id>/refund', methods=['POST'])
 async def v1_refund(request: Request, order_id):
     """Refund fraud"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'order_id': order_id,
         'amount': data.get('amount', 0),
@@ -306,7 +307,7 @@ async def v1_refund(request: Request, order_id):
 @ecommerce_router.route('/api/v1/ecommerce/gift-cards/generate', methods=['POST'])
 async def v1_gift_card_generate(request: Request):
     """Gift card generation abuse"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     gift_cards = []
     for _ in range(min(data.get('quantity', 1), 5)):
         code = f'GC-{uuid.uuid4().hex[:6]}'
@@ -348,7 +349,7 @@ async def v1_payment_method(request: Request, method_id):
 @ecommerce_router.route('/api/v1/ecommerce/checkout/submit', methods=['POST'])
 async def v1_checkout_submit(request: Request):
     """Checkout submit - race condition"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'cart_id': data.get('cart_id'),
         'status': 'submitted',
@@ -399,7 +400,7 @@ async def v1_order_details(request: Request, order_id):
 @ecommerce_router.route('/api/v1/ecommerce/customers/<customer_id>/email', methods=['PUT'])
 async def v1_customer_email_update(request: Request, customer_id):
     """Account takeover via email change"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'customer_id': customer_id,
         'new_email': data.get('email'),
@@ -421,7 +422,7 @@ async def v1_wishlist(request: Request, customer_id):
 @ecommerce_router.route('/api/v1/ecommerce/vendors/register', methods=['POST'])
 async def v1_vendor_register(request: Request):
     """Vendor onboarding bypass"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     vendor_id = f"VEND-{uuid.uuid4().hex[:6]}"
     vendor_registry_db[vendor_id] = {
         'vendor_id': vendor_id,
@@ -447,7 +448,7 @@ async def v1_vendor_details(request: Request, vendor_id):
 @ecommerce_router.route('/api/v1/ecommerce/vendors/payouts', methods=['POST'])
 async def v1_vendor_payouts(request: Request):
     """Vendor payout manipulation"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     payout_id = f"PAY-{uuid.uuid4().hex[:6]}"
     payout = {
         'payout_id': payout_id,
@@ -465,7 +466,7 @@ async def v1_vendor_payouts(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/returns/request', methods=['POST'])
 async def v1_return_request(request: Request):
     """Return request abuse"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return_id = f"RET-{uuid.uuid4().hex[:6]}"
     record = {
         'return_id': return_id,
@@ -483,7 +484,7 @@ async def v1_return_request(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/chargebacks/submit', methods=['POST'])
 async def v1_chargeback_submit(request: Request):
     """Chargeback fraud"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     chargeback_id = f"CB-{uuid.uuid4().hex[:6]}"
     record = {
         'chargeback_id': chargeback_id,
@@ -501,7 +502,7 @@ async def v1_chargeback_submit(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/returns/approve', methods=['PUT'])
 async def v1_return_approve(request: Request):
     """Return approval bypass"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return_id = data.get('return_id', 'return-1')
     record = ecommerce_returns_db.get(return_id, {'return_id': return_id})
     record['status'] = 'approved'
@@ -516,7 +517,7 @@ async def v1_return_approve(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/loyalty/points/transfer', methods=['POST'])
 async def v1_loyalty_transfer(request: Request):
     """Loyalty transfer abuse"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     transfer_id = f"LTX-{uuid.uuid4().hex[:6]}"
     return JSONResponse({
         'transfer_id': transfer_id,
@@ -530,7 +531,7 @@ async def v1_loyalty_transfer(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/loyalty/tiers', methods=['PUT'])
 async def v1_loyalty_tiers(request: Request):
     """Loyalty tier manipulation"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'customer_id': data.get('customer_id'),
         'tier': data.get('tier', 'gold'),
@@ -542,7 +543,7 @@ async def v1_loyalty_tiers(request: Request):
 @ecommerce_router.route('/api/v1/ecommerce/loyalty/redeem', methods=['PUT'])
 async def v1_loyalty_redeem(request: Request):
     """Loyalty redemption abuse"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     redemption_id = f"LR-{uuid.uuid4().hex[:6]}"
     loyalty_redemptions_db[redemption_id] = data
     return JSONResponse({
@@ -560,7 +561,7 @@ async def v1_vendor_webhook(request: Request):
     Register Vendor Webhook
     VULNERABILITY: Blind SSRF (Server-Side Request Forgery)
     """
-    data = await request.json() or {}
+    data = await safe_json(request)
     webhook_url = data.get('url')
     
     if not webhook_url:

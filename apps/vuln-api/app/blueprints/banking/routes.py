@@ -13,6 +13,7 @@ import hashlib
 
 from . import banking_router
 from app.models import *
+from app.routing import safe_json
 from app.utils.hotpatch import hotpatch
 
 
@@ -163,7 +164,7 @@ async def create_wire_transfer(request: Request):
     Process wire transfer without AML checks.
     VULNERABILITY: Accepts bypass_aml flag without authorization.
     """
-    data = await request.json() or {}
+    data = await safe_json(request)
     wire = {
         'wire_id': f'WIRE-{uuid.uuid4().hex[:8].upper()}',
         'amount': data.get('amount', 0),

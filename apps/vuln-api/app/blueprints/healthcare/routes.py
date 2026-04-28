@@ -16,6 +16,7 @@ import base64
 
 from . import healthcare_router
 from app.models import *
+from app.routing import safe_json
 from app.utils.security_config import security_config
 
 
@@ -29,7 +30,7 @@ async def emergency_access(request: Request):
     Emergency "Break-Glass" access to PHI.
     VULNERABILITY: Missing Justification, Missing Audit Alert
     """
-    data = await request.json() or {}
+    data = await safe_json(request)
     patient_id = data.get('patient_id')
     justification = data.get('justification')
     
@@ -53,7 +54,7 @@ async def export_records(request: Request):
     Bulk PHI data export.
     VULNERABILITY: Mass Data Exfiltration, Unauthorized PHI Access
     """
-    data = await request.json() or {}
+    data = await safe_json(request)
     patient_ids = data.get('patient_ids', [])
     export_format = data.get('format', 'pdf')
     
@@ -227,7 +228,7 @@ async def upload_documents(request: Request):
     # Vulnerability: Path traversal in filename handling
     # Vulnerability: Unrestricted file upload
 
-    data = await request.json() or {}
+    data = await safe_json(request)
     record_id = data.get('record_id')
     filename = data.get('filename', '')
     content = data.get('content', '')
@@ -297,7 +298,7 @@ async def schedule_appointment(request: Request):
     # Vulnerability: No provider credential verification
     # Vulnerability: Can schedule for any patient
 
-    data = await request.json() or {}
+    data = await safe_json(request)
     patient_id = data.get('patient_id')
     provider_id = data.get('provider_id')
     appointment_date = data.get('date')
@@ -321,7 +322,7 @@ async def cancel_appointment(request: Request):
     """Cancel appointment - IDOR vulnerability"""
     # Vulnerability: Can cancel any appointment without authorization
 
-    data = await request.json() or {}
+    data = await safe_json(request)
     appointment_id = data.get('appointment_id')
 
     return JSONResponse({
@@ -373,7 +374,7 @@ async def request_refill(request: Request):
     # Vulnerability: Can request refills without provider verification
     # Vulnerability: No check on refill limits for controlled substances
 
-    data = await request.json() or {}
+    data = await safe_json(request)
     prescription_id = data.get('prescription_id')
     patient_id = data.get('patient_id')
 
@@ -522,7 +523,7 @@ async def imaging_download(request: Request, record_id):
 @healthcare_router.route('/api/v1/healthcare/telehealth/session', methods=['POST'])
 async def telehealth_session(request: Request):
     """Telehealth session access - session hijack vulnerability"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     session_id = data.get('session_id', f'TELE-{uuid.uuid4().hex[:6]}')
 
     session_payload = {
@@ -544,7 +545,7 @@ async def telehealth_session(request: Request):
 @healthcare_router.route('/api/v1/healthcare/pharmacy/prior-auth', methods=['POST'])
 async def pharmacy_prior_auth(request: Request):
     """Prior authorization override - approval bypass"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     auth_id = f'PA-{uuid.uuid4().hex[:8]}'
 
     auth_record = {
@@ -601,7 +602,7 @@ async def submit_claim(request: Request):
     # Vulnerability: Can submit claims for any policy
     # Vulnerability: No validation of claim amounts
 
-    data = await request.json() or {}
+    data = await safe_json(request)
     claim_id = f'CLM-{uuid.uuid4().hex[:8]}'
 
     claim = {
@@ -670,7 +671,7 @@ async def check_coverage(request: Request):
 @healthcare_router.route('/api/v1/healthcare/insurance/claims', methods=['POST'])
 async def healthcare_insurance_claims(request: Request):
     """Submit insurance claim (healthcare namespace)"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     claim_id = f'CLM-{uuid.uuid4().hex[:8]}'
 
     claim = {
@@ -718,7 +719,7 @@ async def healthcare_insurance_eligibility(request: Request):
 @healthcare_router.route('/api/v1/healthcare/insurance/preauth', methods=['POST'])
 async def healthcare_insurance_preauth(request: Request):
     """Pre-authorization override"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     preauth_id = f'PRE-{uuid.uuid4().hex[:8]}'
 
     record = {
@@ -887,7 +888,7 @@ async def hipaa_transfer_encrypted(request: Request):
     # Vulnerability: SSRF through unvalidated destination URL
     # Vulnerability: Insecure data transfer
 
-    data = await request.json() or {}
+    data = await safe_json(request)
     destination = data.get('destination', '')
     patient_ids = data.get('patient_ids', [])
 
@@ -923,7 +924,7 @@ async def hipaa_system_configuration(request: Request):
     # Vulnerability: XXE injection through XML configuration
     # Vulnerability: Deserialization attack
 
-    data = await request.json() or {}
+    data = await safe_json(request)
     config_xml = data.get('config_xml', '')
     config_serialized = data.get('config_data', '')
 
@@ -967,7 +968,7 @@ async def hipaa_audit_logs(request: Request):
     # Vulnerability: Can modify or delete audit logs
     # Vulnerability: No integrity protection
 
-    data = await request.json() or {}
+    data = await safe_json(request)
     action = data.get('action', '')
     target_logs = data.get('target_logs', [])
 

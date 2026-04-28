@@ -13,6 +13,7 @@ import logging
 
 from . import integrations_router
 from app.config import app_config
+from app.routing import safe_json
 from app.models import *
 from app.services import (
     ApparatusService,
@@ -63,7 +64,7 @@ async def ws_simulate_frame(request: Request):
     Simulated WebSocket message frame processor.
     VULNERABILITY: Insecure Message Processing, Logic Manipulation
     """
-    data = await request.json() or {}
+    data = await safe_json(request)
     frame_type = data.get('type', 'text')
     payload = data.get('data', {})
     
@@ -141,7 +142,7 @@ async def integrations_apparatus_history(request: Request):
 async def integrations_apparatus_ghosts_start(request: Request):
     """Start Apparatus ghost traffic with Chimera-provided settings."""
     service = _get_apparatus_service()
-    payload = await request.json() or {}
+    payload = await safe_json(request)
     allowed_keys = {'rps', 'duration', 'endpoints'}
 
     if not isinstance(payload, dict):
@@ -213,14 +214,14 @@ async def integrations_discovery(request: Request):
 @integrations_router.route('/api/webhooks/callback', methods=['POST'])
 async def webhooks_callback(request: Request):
     """Webhook callback endpoint - vulnerable to SSRF and hijacking"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     target_url = data.get('url', '')
 
 
 @integrations_router.route('/api/integrations/third-party', methods=['POST'])
 async def integrations_third_party(request: Request):
     """Third-party integration registration - credential exposure"""
-    data = await request.json() or {}
+    data = await safe_json(request)
 
 
 @integrations_router.route('/api/integrations/payment/webhook')
@@ -233,7 +234,7 @@ async def integrations_payment_webhook(request: Request):
 @integrations_router.route('/api/integrations/cdn/invalidate', methods=['POST'])
 async def integrations_cdn_invalidate(request: Request):
     """CDN cache invalidation - vulnerable to cache poisoning"""
-    data = await request.json() or {}
+    data = await safe_json(request)
 
 
 @integrations_router.route('/api/integrations/social/callback')
@@ -246,7 +247,7 @@ async def integrations_social_callback(request: Request):
 @integrations_router.route('/api/integrations/email/webhook', methods=['POST'])
 async def integrations_email_webhook(request: Request):
     """Email service webhook - vulnerable to header injection"""
-    data = await request.json() or {}
+    data = await safe_json(request)
 
 
 @integrations_router.route('/api/integrations/analytics/data')
@@ -259,13 +260,13 @@ async def integrations_analytics_data(request: Request):
 @integrations_router.route('/api/integrations/crm/sync', methods=['POST'])
 async def integrations_crm_sync(request: Request):
     """CRM data synchronization - mass data exfiltration vector"""
-    data = await request.json() or {}
+    data = await safe_json(request)
 
 
 @integrations_router.route('/api/integrations/backdoor', methods=['POST'])
 async def integrations_backdoor(request: Request):
     """Integration backdoor - persistent access mechanism"""
-    data = await request.json() or {}
+    data = await safe_json(request)
 
 
 @integrations_router.route('/api/integrations/export')
@@ -277,6 +278,6 @@ async def integrations_export(request: Request):
 @integrations_router.route('/api/integrations/verify', methods=['POST'])
 async def integrations_verify(request: Request):
     """Integration verification endpoint - insecure signature validation"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     signature = data.get('signature', '')
     payload = data.get('payload', {})

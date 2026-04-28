@@ -10,6 +10,7 @@ import random
 
 from . import insurance_router
 from app.models import *
+from app.routing import safe_json
 
 
 # ============================================================================
@@ -30,7 +31,7 @@ async def claims_portal(request: Request):
 @insurance_router.route('/api/claims/submit', methods=['POST'])
 async def claims_submit(request: Request):
     """Claims submission endpoint"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     claim_id = f"CLM-{uuid.uuid4().hex[:8]}"
 
     claim = {
@@ -75,7 +76,7 @@ async def claims_history(request: Request):
 @insurance_router.route('/api/claims/<claim_id>/status', methods=['PUT'])
 async def claims_status_update(request: Request, claim_id):
     """Update the status of a claim"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     new_status = data.get('status', 'under_review')
     adjuster_id = data.get('adjuster_id', 'ADJ-UNKNOWN')
 
@@ -98,7 +99,7 @@ async def claims_status_update(request: Request, claim_id):
 @insurance_router.route('/api/claims/duplicate', methods=['POST'])
 async def claims_duplicate(request: Request):
     """Duplicate an existing claim - fraud scenario"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     source_claim_id = data.get('claim_id')
 
     source_claim = claims_db.get(source_claim_id, {})
@@ -124,7 +125,7 @@ async def claims_duplicate(request: Request):
 @insurance_router.route('/api/claims/photos/upload', methods=['POST'])
 async def claims_photos_upload(request: Request):
     """Upload photographic evidence for claims"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     claim_id = data.get('claim_id')
     photos = data.get('photos', [])
 
@@ -183,7 +184,7 @@ async def claims_fraud_indicators(request: Request):
 @insurance_router.route('/api/claims/expedite', methods=['POST'])
 async def claims_expedite(request: Request):
     """Expedite a claim processing"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     claim_id = data.get('claim_id')
     justification = data.get('justification', '')
 
@@ -204,7 +205,7 @@ async def claims_expedite(request: Request):
 @insurance_router.route('/api/claims/amounts/inflate', methods=['PUT'])
 async def claims_amounts_inflate(request: Request):
     """Artificially inflate claim amounts - abuse scenario"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     claim_id = data.get('claim_id')
     multiplier = float(data.get('multiplier', 1))
 
@@ -232,7 +233,7 @@ async def claims_amounts_inflate(request: Request):
 @insurance_router.route('/api/policies/<policy_id>/limits', methods=['PUT'])
 async def policy_limits(request: Request, policy_id):
     """Policy limits modification - administrative function"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     new_limit = data.get('coverage_limit', 0)
 
     policy = policies_db.get(policy_id, {'policy_id': policy_id, 'coverage_limit': 0, 'overrides': []})
@@ -277,7 +278,7 @@ async def policies_search(request: Request):
 @insurance_router.route('/api/policies/coverage-limits', methods=['PUT'])
 async def policies_coverage_limits(request: Request):
     """Policy coverage modification endpoint"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy_id = data.get('policy_id')
     new_limit = data.get('coverage_limit')
     justification = data.get('justification', '')
@@ -331,7 +332,7 @@ async def policies_pricing_models(request: Request):
 @insurance_router.route('/api/policies/backdoor', methods=['POST'])
 async def policies_backdoor(request: Request):
     """Policy backdoor access - administrative bypass"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy_id = data.get('policy_id')
     access_token = data.get('access_token', '')
 
@@ -349,7 +350,7 @@ async def policies_backdoor(request: Request):
 @insurance_router.route('/api/policies/bulk-modify', methods=['POST'])
 async def policies_bulk_modify(request: Request):
     """Bulk modify policies - mass manipulation vector"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy_ids = data.get('policy_ids', [])
     modifications = data.get('modifications', {})
 
@@ -370,7 +371,7 @@ async def policies_bulk_modify(request: Request):
 @insurance_router.route('/api/underwriting/risk-assessment', methods=['POST'])
 async def risk_assessment(request: Request):
     """Risk assessment endpoint"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy_id = data.get('policy_id')
     override_score = data.get('override_score')
 
@@ -397,7 +398,7 @@ async def underwriting_rules(request: Request):
 @insurance_router.route('/api/underwriting/override', methods=['POST'])
 async def underwriting_override(request: Request):
     """Override underwriting decisions"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy_id = data.get('policy_id')
     rule_id = data.get('rule_id')
     reason = data.get('reason', 'manual_override')
@@ -446,7 +447,7 @@ async def underwriting_export(request: Request):
 @insurance_router.route('/api/actuarial/models/modify', methods=['PUT'])
 async def actuarial_models_modify(request: Request):
     """Modify actuarial models - tampering scenario"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     model_id = data.get('model_id')
     new_version = data.get('version')
     adjustment = data.get('adjustment_factor', 1.0)
@@ -483,7 +484,7 @@ async def risk_factors(request: Request):
 @insurance_router.route('/api/risk/scores/manipulate', methods=['PUT'])
 async def risk_scores_manipulate(request: Request):
     """Manipulate risk scores - fraud vector"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy_id = data.get('policy_id')
     new_score = data.get('risk_score', 0.5)
     reason = data.get('reason', 'manual_adjustment')
@@ -504,7 +505,7 @@ async def risk_scores_manipulate(request: Request):
 @insurance_router.route('/api/premiums/calculate', methods=['POST'])
 async def premiums_calculate(request: Request):
     """Premium calculation endpoint"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy_type = data.get('policy_type', 'auto')
     base_premium = float(data.get('base_premium', 1000))
     risk_score = float(data.get('risk_score', 0.5))
@@ -557,7 +558,7 @@ async def v1_claims_search(request: Request):
 @insurance_router.route('/api/v1/insurance/claims/<claim_id>/payout', methods=['PUT'])
 async def v1_claim_payout(request: Request, claim_id):
     """Payout manipulation"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     claim = claims_db.get(claim_id, {'claim_id': claim_id})
     claim['payout_amount'] = data.get('amount', 0)
     claim['override_limits'] = data.get('override_limits', False)
@@ -583,7 +584,7 @@ async def v1_claims_export(request: Request):
 @insurance_router.route('/api/v1/insurance/claims/evidence/upload', methods=['POST'])
 async def v1_claims_evidence_upload(request: Request):
     """Evidence upload - file validation bypass"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     evidence_id = f"EVID-{uuid.uuid4().hex[:8]}"
     claims_evidence_db[evidence_id] = {
         'evidence_id': evidence_id,
@@ -600,7 +601,7 @@ async def v1_claims_evidence_upload(request: Request):
 @insurance_router.route('/api/v1/insurance/claims/override', methods=['POST'])
 async def v1_claims_override(request: Request):
     """Claims override - fraud controls bypass"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     claim_id = data.get('claim_id')
     claim = claims_db.get(claim_id, {'claim_id': claim_id})
     claim['override_fraud_checks'] = data.get('override_fraud_checks', False)
@@ -614,7 +615,7 @@ async def v1_claims_override(request: Request):
 @insurance_router.route('/api/v1/insurance/claims/settlement', methods=['POST'])
 async def v1_claims_settlement(request: Request):
     """Claims settlement override"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     settlement_id = f"SET-{uuid.uuid4().hex[:8]}"
     record = {
         'settlement_id': settlement_id,
@@ -643,7 +644,7 @@ async def v1_policy_details(request: Request, policy_id):
 @insurance_router.route('/api/v1/insurance/policies/<policy_id>/endorse', methods=['POST'])
 async def v1_policy_endorse(request: Request, policy_id):
     """Policy endorsement tampering"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy = policies_db.get(policy_id, {'policy_id': policy_id, 'endorsements': []})
     endorsement = {
         'endorsement_id': f'END-{uuid.uuid4().hex[:8]}',
@@ -663,7 +664,7 @@ async def v1_policy_endorse(request: Request, policy_id):
 @insurance_router.route('/api/v1/insurance/policies/<policy_id>/cancel', methods=['PUT'])
 async def v1_policy_cancel(request: Request, policy_id):
     """Policy cancellation override"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy = policies_db.get(policy_id, {'policy_id': policy_id})
     policy['status'] = 'cancelled'
     policy['bypass_validation'] = data.get('bypass_validation', False)
@@ -678,7 +679,7 @@ async def v1_policy_cancel(request: Request, policy_id):
 @insurance_router.route('/api/v1/insurance/underwriting/approve', methods=['POST'])
 async def v1_underwriting_approve(request: Request):
     """Underwriting approval bypass"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy_id = data.get('policy_id')
     policy = policies_db.get(policy_id, {'policy_id': policy_id})
     policy['approved'] = True
@@ -693,7 +694,7 @@ async def v1_underwriting_approve(request: Request):
 @insurance_router.route('/api/v1/insurance/policies/<policy_id>/premium', methods=['PUT'])
 async def v1_policy_premium(request: Request, policy_id):
     """Premium tampering"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy = policies_db.get(policy_id, {'policy_id': policy_id})
     policy['annual_premium'] = data.get('annual_premium', 0)
     policy['bypass_audit'] = data.get('bypass_audit', False)
@@ -707,7 +708,7 @@ async def v1_policy_premium(request: Request, policy_id):
 @insurance_router.route('/api/v1/insurance/policies/<policy_id>/beneficiary', methods=['POST'])
 async def v1_policy_beneficiary(request: Request, policy_id):
     """Beneficiary change abuse"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy = policies_db.get(policy_id, {'policy_id': policy_id})
     policy['beneficiary'] = data.get('beneficiary')
     policy['skip_verification'] = data.get('skip_verification', False)
@@ -733,7 +734,7 @@ async def v1_policy_documents_export(request: Request, policy_id):
 @insurance_router.route('/api/v1/insurance/risk/scores/manipulate', methods=['PUT'])
 async def v1_risk_score_manipulate(request: Request):
     """Risk score manipulation"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     policy_id = data.get('policy_id')
     policy = policies_db.get(policy_id, {'policy_id': policy_id})
     policy['risk_score'] = data.get('risk_score', 0.5)
@@ -748,7 +749,7 @@ async def v1_risk_score_manipulate(request: Request):
 @insurance_router.route('/api/v1/insurance/billing/tokenize', methods=['POST'])
 async def v1_billing_tokenize(request: Request):
     """Tokenization abuse"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'token': f'TOK-{uuid.uuid4().hex[:8]}',
         'force_token': data.get('force_token'),
@@ -773,7 +774,7 @@ async def v1_billing_invoice(request: Request, invoice_id):
 @insurance_router.route('/api/v1/insurance/billing/refund', methods=['POST'])
 async def v1_billing_refund(request: Request):
     """Refund abuse"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'invoice_id': data.get('invoice_id'),
         'amount': data.get('amount', 0),
@@ -784,7 +785,7 @@ async def v1_billing_refund(request: Request):
 @insurance_router.route('/api/v1/insurance/billing/autopay', methods=['PUT'])
 async def v1_billing_autopay(request: Request):
     """Autopay bypass"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     return JSONResponse({
         'enabled': data.get('enabled', True),
         'bypass_mfa': data.get('bypass_mfa', False),
@@ -826,7 +827,7 @@ async def v1_broker_commissions_export(request: Request):
 @insurance_router.route('/api/v1/insurance/brokers/clients/<client_id>', methods=['PUT'])
 async def v1_broker_client_update(request: Request, client_id):
     """Broker client tampering"""
-    data = await request.json() or {}
+    data = await safe_json(request)
     insurance_broker_clients_db[client_id] = {
         'client_id': client_id,
         'override_policy': data.get('override_policy', False),
