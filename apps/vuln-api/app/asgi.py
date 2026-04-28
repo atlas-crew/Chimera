@@ -237,7 +237,13 @@ def create_app(config: dict | None = None) -> Starlette:
     # Keep precedence stable in both API-only and built-frontend environments.
     sort_routes_by_specificity(routes)
 
+    from app.middleware.traffic_recorder_asgi import TrafficRecorderMiddleware
+
     middleware = [
+        # Outermost: TrafficRecorder mirrors Flask's before/after_request hooks,
+        # which surround the entire dispatch. Wall-clock duration includes the
+        # rest of the middleware stack, matching the WSGI version's semantics.
+        Middleware(TrafficRecorderMiddleware),
         Middleware(
             CORSMiddleware,
             allow_origins=["*"],
