@@ -5,9 +5,8 @@ WARNING: This is a DEMO ENVIRONMENT with INTENTIONAL vulnerabilities.
 These endpoints allow triggering errors for WAF testing purposes.
 NEVER use this code in production.
 """
+from app.routing import DecoratorRouter as Router
 
-from flask import Blueprint
-
-testing_bp = Blueprint('testing', __name__, url_prefix='/api/test')
+testing_router = Router(routes=[])
 
 from . import routes

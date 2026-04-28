@@ -187,13 +187,10 @@ def create_app(config=None):
     register_error_handlers(app)
 
     # Import and register blueprints.
-    # NOTE: main, recorder, diagnostics, throughput, admin, government,
-    # telecom, energy_utilities, security_ops, loyalty, compliance, ics_ot,
-    # infrastructure, genai, education, checkout, mobile, payments, and saas have been
-    # migrated to Starlette (see app/asgi.py).
-    # During the transition, migrated API domains listed below are mirrored
-    # back into Flask via register_flask_compat_routes so app.py/local WSGI
-    # callers keep working while the cutover remains in mixed mode.
+    # NOTE: every blueprint except auth (and conditional database_vulnerable)
+    # is now Starlette — see app/asgi.py. During the transition the migrated
+    # routers are mirrored back into Flask via register_flask_compat_routes
+    # so WSGI callers keep working until the uvicorn cutover (task-16.8).
     from app.blueprints.auth import auth_bp
     from app.blueprints.banking import banking_router
     from app.blueprints.mobile import mobile_router
@@ -205,7 +202,7 @@ def create_app(config=None):
     from app.blueprints.integrations import integrations_router
     from app.blueprints.saas import saas_router
     from app.blueprints.admin import admin_router
-    from app.blueprints.testing import testing_bp
+    from app.blueprints.testing import testing_router
     from app.blueprints.education import education_router
     from app.blueprints.attack_sim import attack_sim_router
     from app.blueprints.government import government_router
@@ -228,7 +225,6 @@ def create_app(config=None):
 
     # Register remaining Flask blueprints while migrated routes stay mirrored via compat adapters.
     app.register_blueprint(auth_bp)
-    app.register_blueprint(testing_bp)
 
     register_flask_compat_routes(app, admin_router, endpoint_prefix="admin")
     register_flask_compat_routes(app, attack_sim_router, endpoint_prefix="attack_sim")
@@ -260,6 +256,7 @@ def create_app(config=None):
     register_flask_compat_routes(app, insurance_router, endpoint_prefix="insurance")
     register_flask_compat_routes(app, ecommerce_router, endpoint_prefix="ecommerce")
     register_flask_compat_routes(app, integrations_router, endpoint_prefix="integrations")
+    register_flask_compat_routes(app, testing_router, endpoint_prefix="testing")
     register_flask_compat_routes(app, diagnostics_router, endpoint_prefix="diagnostics")
     register_flask_compat_routes(app, throughput_router, endpoint_prefix="throughput")
     register_flask_compat_routes(app, recorder_router, endpoint_prefix="recorder")

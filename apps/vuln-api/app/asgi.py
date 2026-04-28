@@ -190,6 +190,7 @@ def create_app(config: dict | None = None) -> Starlette:
     from app.blueprints.ecommerce import ecommerce_router
     from app.blueprints.integrations import integrations_router
     from app.blueprints.healthcare import healthcare_router
+    from app.blueprints.testing import testing_router
 
     # Core infrastructure routes + routes from ported blueprints
     routes = [
@@ -222,6 +223,7 @@ def create_app(config: dict | None = None) -> Starlette:
         *insurance_router.routes,
         *ecommerce_router.routes,
         *integrations_router.routes,
+        *testing_router.routes,
     ]
 
     # SPA static files

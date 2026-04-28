@@ -6,20 +6,30 @@ These endpoints intentionally trigger errors for testing purposes.
 NEVER use this code in production.
 """
 
-import time
-import random
+import asyncio
 import os
-from typing import Dict, Any, Tuple
+import random
+from typing import Any, Dict, Tuple
 
-from flask import request, jsonify, abort
-from werkzeug.exceptions import HTTPException
+from starlette.exceptions import HTTPException
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
-from . import testing_bp
+from . import testing_router
 from app.config import app_config
 
 
-@testing_bp.route('/error/<error_type>', methods=['GET', 'POST'])
-def trigger_error(error_type: str) -> Tuple[Dict[str, Any], int]:
+def _is_json_content_type(content_type: str | None) -> bool:
+    if not content_type:
+        return False
+    media_type = content_type.split(";", 1)[0].strip().lower()
+    return media_type == "application/json" or (
+        media_type.startswith("application/") and media_type.endswith("+json")
+    )
+
+
+@testing_router.route('/api/test/error/<error_type>', methods=['GET', 'POST'])
+async def trigger_error(request: Request, error_type: str) -> Tuple[Dict[str, Any], int]:
     """
     Trigger specific error conditions for WAF testing.
 
@@ -49,53 +59,56 @@ def trigger_error(error_type: str) -> Tuple[Dict[str, Any], int]:
     Returns:
         JSON response (usually an error)
     """
-    custom_message = request.args.get('message', 'Triggered by test endpoint')
+    custom_message = request.query_params.get('message', 'Triggered by test endpoint')
 
     if error_type == 'timeout':
-        delay = int(request.args.get('delay', 5))
-        time.sleep(delay)
-        return jsonify({
+        delay = int(request.query_params.get('delay', 5))
+        # Use asyncio.sleep so we don't block the Starlette event loop.
+        # The WSGI compat shim drives this through async_to_sync, which
+        # spins up its own loop, so the WSGI path also pauses correctly.
+        await asyncio.sleep(delay)
+        return JSONResponse({
             "status": "completed",
             "error_type": "timeout",
             "message": f"Operation completed after {delay} seconds",
             "demo_warning": "THIS IS A DEMO - Intentionally slow for testing"
-        }), 200
+        }, status_code=200)
 
     elif error_type == 'memory':
-        size_mb = int(request.args.get('size', 100))
+        size_mb = int(request.query_params.get('size', 100))
         try:
             # Attempt to allocate large memory block
             big_list = [0] * (size_mb * 1024 * 1024 // 8)  # Each int is ~8 bytes
-            return jsonify({
+            return JSONResponse({
                 "status": "completed",
                 "error_type": "memory",
                 "message": f"Allocated ~{size_mb}MB of memory",
                 "list_size": len(big_list),
                 "demo_warning": "THIS IS A DEMO - Intentionally wasteful for testing"
-            }), 200
+            }, status_code=200)
         except MemoryError as e:
             raise MemoryError(f"Failed to allocate {size_mb}MB: {custom_message}") from e
 
     elif error_type == 'cpu':
-        iterations = int(request.args.get('iterations', 1000000))
+        iterations = int(request.query_params.get('iterations', 1000000))
         result = 0
         for i in range(iterations):
             result += i * i
-        return jsonify({
+        return JSONResponse({
             "status": "completed",
             "error_type": "cpu",
             "message": f"Completed {iterations} iterations",
             "result": result,
             "demo_warning": "THIS IS A DEMO - Intentionally CPU-intensive for testing"
-        }), 200
+        }, status_code=200)
 
     elif error_type == 'exception':
         raise Exception(f"Generic exception triggered: {custom_message}")
 
     elif error_type == 'sql':
         # Simulate SQL injection vulnerability response
-        username = request.args.get('username', 'admin')
-        password = request.args.get('password', 'password123')
+        username = request.query_params.get('username', 'admin')
+        password = request.query_params.get('password', 'password123')
 
         # INTENTIONALLY VULNERABLE - Shows what raw SQL would look like
         fake_query = f"SELECT * FROM users WHERE username='{username}' AND password='{password}'"
@@ -107,7 +120,7 @@ def trigger_error(error_type: str) -> Tuple[Dict[str, Any], int]:
 
     elif error_type == 'file':
         # Simulate file system access vulnerability
-        filepath = request.args.get('path', '/etc/passwd')
+        filepath = request.query_params.get('path', '/etc/passwd')
 
         # INTENTIONALLY VULNERABLE - Shows what file access would look like
         # (we don't actually read the file, just simulate the error)
@@ -124,31 +137,31 @@ def trigger_error(error_type: str) -> Tuple[Dict[str, Any], int]:
 
     elif error_type == 'divide_zero':
         # Trigger division by zero
-        denominator = int(request.args.get('denominator', 0))
+        denominator = int(request.query_params.get('denominator', 0))
         result = 42 / denominator
-        return jsonify({"result": result}), 200
+        return JSONResponse({"result": result}, status_code=200)
 
     elif error_type == 'null_ref':
         # Trigger AttributeError (null reference)
         obj = None
-        return jsonify({"value": obj.some_attribute}), 200
+        return JSONResponse({"value": obj.some_attribute}, status_code=200)
 
     elif error_type == 'type_error':
         # Trigger TypeError
         result = "string" + 42
-        return jsonify({"result": result}), 200
+        return JSONResponse({"result": result}, status_code=200)
 
     elif error_type == 'key_error':
         # Trigger KeyError
         data = {"existing_key": "value"}
-        key = request.args.get('key', 'nonexistent_key')
-        return jsonify({"value": data[key]}), 200
+        key = request.query_params.get('key', 'nonexistent_key')
+        return JSONResponse({"value": data[key]}, status_code=200)
 
     elif error_type == 'index_error':
         # Trigger IndexError
         data = [1, 2, 3]
-        index = int(request.args.get('index', 999))
-        return jsonify({"value": data[index]}), 200
+        index = int(request.query_params.get('index', 999))
+        return JSONResponse({"value": data[index]}, status_code=200)
 
     elif error_type == 'random':
         # Pick a random error type
@@ -158,16 +171,21 @@ def trigger_error(error_type: str) -> Tuple[Dict[str, Any], int]:
         ]
         chosen_type = random.choice(error_types)
         # Recursive call to trigger the chosen error
-        return trigger_error(chosen_type)
+        return await trigger_error(request, chosen_type)
 
     else:
-        abort(400, description=f"Unknown error type: {error_type}. "
-                              f"Supported types: timeout, memory, cpu, exception, sql, file, "
-                              f"random, divide_zero, null_ref, type_error, key_error, index_error")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown error type: {error_type}. "
+                f"Supported types: timeout, memory, cpu, exception, sql, file, "
+                f"random, divide_zero, null_ref, type_error, key_error, index_error"
+            ),
+        )
 
 
-@testing_bp.route('/status/<int:code>', methods=['GET', 'POST'])
-def return_status_code(code: int) -> Tuple[Dict[str, Any], int]:
+@testing_router.route('/api/test/status/<int:code>', methods=['GET', 'POST'])
+async def return_status_code(request: Request, code: int) -> Tuple[Dict[str, Any], int]:
     """
     Return a specific HTTP status code for testing.
 
@@ -185,14 +203,17 @@ def return_status_code(code: int) -> Tuple[Dict[str, Any], int]:
         JSON response with the specified status code
     """
     if code < 100 or code > 599:
-        abort(400, description=f"Invalid status code: {code}. Must be between 100 and 599.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status code: {code}. Must be between 100 and 599.",
+        )
 
-    custom_message = request.args.get('message', f'Testing HTTP {code} response')
-    use_abort = request.args.get('abort', 'false').lower() == 'true'
+    custom_message = request.query_params.get('message', f'Testing HTTP {code} response')
+    use_abort = request.query_params.get('abort', 'false').lower() == 'true'
 
     # If client wants to use abort (which triggers error handlers)
     if use_abort and code >= 400:
-        abort(code, description=custom_message)
+        raise HTTPException(status_code=code, detail=custom_message)
 
     # Build response with leaked information
     response_data = {
@@ -200,9 +221,9 @@ def return_status_code(code: int) -> Tuple[Dict[str, Any], int]:
         "message": custom_message,
         "demo_warning": "THIS IS A DEMO - Intentionally returns arbitrary status codes",
         "request_details": {
-            "path": request.path,
+            "path": request.url.path,
             "method": request.method,
-            "remote_addr": request.remote_addr,
+            "remote_addr": request.client.host if request.client else None,
             "user_agent": request.headers.get("User-Agent", "Unknown"),
         }
     }
@@ -219,11 +240,11 @@ def return_status_code(code: int) -> Tuple[Dict[str, Any], int]:
     else:
         response_data["category"] = "Informational"
 
-    return jsonify(response_data), code
+    return JSONResponse(response_data, status_code=code)
 
 
-@testing_bp.route('/chain/<int:depth>', methods=['GET'])
-def error_chain(depth: int) -> Dict[str, Any]:
+@testing_router.route('/api/test/chain/<int:depth>', methods=['GET'])
+async def error_chain(request: Request, depth: int) -> Dict[str, Any]:
     """
     Create a chain of nested function calls that eventually error.
 
@@ -240,15 +261,15 @@ def error_chain(depth: int) -> Dict[str, Any]:
 
     if depth == 1:
         # Last level - trigger the error
-        return error_chain(0)
+        return await error_chain(request, 0)
     else:
         # Recursive call with decreasing depth
-        result = error_chain(depth - 1)
+        result = await error_chain(request, depth - 1)
         return result
 
 
-@testing_bp.route('/leak/config', methods=['GET'])
-def leak_config() -> Dict[str, Any]:
+@testing_router.route('/api/test/leak/config', methods=['GET'])
+async def leak_config(request: Request) -> Dict[str, Any]:
     """
     Intentionally leak application configuration.
 
@@ -257,20 +278,27 @@ def leak_config() -> Dict[str, Any]:
     Returns:
         JSON response with application configuration
     """
-    # Leak all configuration (INTENTIONALLY INSECURE)
+    # Leak all configuration via the framework-agnostic app_config singleton.
+    # current_app.config is Flask-only and not available under Starlette, so
+    # we surface the same vulnerability surface (secret_key, debug, testing,
+    # full config dump) through app_config to keep the AC behavior intact.
     config_dict = {key: repr(value) for key, value in app_config.items()}
 
-    # Attempt to read framework-specific internals (Flask or Starlette)
+    # Best-effort leak of Flask-specific internals when reachable through the
+    # WSGI compat shim. Under native Starlette there's no current_app, so
+    # these stay empty (as advertised). Both errors are swallowed so the
+    # endpoint stays a stable demo target regardless of framework path.
     blueprints: list = []
     url_rules: list = []
     try:
         from flask import current_app as _ca
+
         blueprints = list(_ca.blueprints.keys())
         url_rules = [str(rule) for rule in _ca.url_map.iter_rules()]
     except (ImportError, RuntimeError):
         pass
 
-    return jsonify({
+    return JSONResponse({
         "demo_warning": "THIS IS A DEMO - Intentionally leaking configuration",
         "config": config_dict,
         "secret_key": app_config.secret_key,
@@ -278,11 +306,11 @@ def leak_config() -> Dict[str, Any]:
         "testing": app_config.testing,
         "blueprints": blueprints,
         "url_map": url_rules,
-    }), 200
+    }, status_code=200)
 
 
-@testing_bp.route('/leak/env', methods=['GET'])
-def leak_environment() -> Dict[str, Any]:
+@testing_router.route('/api/test/leak/env', methods=['GET'])
+async def leak_environment(request: Request) -> Dict[str, Any]:
     """
     Intentionally leak environment variables.
 
@@ -294,18 +322,18 @@ def leak_environment() -> Dict[str, Any]:
     # Leak environment variables (INTENTIONALLY INSECURE)
     env_dict = dict(os.environ)
 
-    return jsonify({
+    return JSONResponse({
         "demo_warning": "THIS IS A DEMO - Intentionally leaking environment variables",
         "environment": env_dict,
         "path": os.environ.get('PATH', 'Not set'),
         "python_path": os.environ.get('PYTHONPATH', 'Not set'),
         "user": os.environ.get('USER', 'Not set'),
         "home": os.environ.get('HOME', 'Not set'),
-    }), 200
+    }, status_code=200)
 
 
-@testing_bp.route('/leak/headers', methods=['GET', 'POST'])
-def leak_headers() -> Dict[str, Any]:
+@testing_router.route('/api/test/leak/headers', methods=['GET', 'POST'])
+async def leak_headers(request: Request) -> Dict[str, Any]:
     """
     Echo back all request headers and data.
 
@@ -314,45 +342,64 @@ def leak_headers() -> Dict[str, Any]:
     Returns:
         JSON response with all request details
     """
+    # Form decoding only makes sense for form-encoded payloads. Eagerly
+    # awaiting request.form() on a JSON or empty body would consume the
+    # body stream and break the JSON/raw-body branches below, so guard on
+    # the content type up front.
+    content_type = request.headers.get("content-type", "")
+    media_type = content_type.split(";", 1)[0].strip().lower()
+    form_data = None
+    if media_type in {"application/x-www-form-urlencoded", "multipart/form-data"}:
+        try:
+            form = await request.form()
+            form_data = {k: v for k, v in form.items()} if form else None
+        except Exception as e:
+            form_data = {"_form_parse_error": str(e)}
+
     response = {
         "demo_warning": "THIS IS A DEMO - Intentionally echoing all request data",
         "headers": dict(request.headers),
         "method": request.method,
-        "path": request.path,
-        "query_string": request.query_string.decode('utf-8'),
-        "args": dict(request.args),
-        "form": dict(request.form) if request.form else None,
+        "path": request.url.path,
+        # Starlette exposes the raw query string as a str on request.url.query
+        # (Flask's request.query_string is bytes); normalize to a string.
+        "query_string": request.url.query,
+        "args": dict(request.query_params),
+        "form": form_data,
         "cookies": dict(request.cookies),
-        "remote_addr": request.remote_addr,
+        "remote_addr": request.client.host if request.client else None,
         "user_agent": request.headers.get("User-Agent", "Unknown"),
     }
 
-    # Try to include JSON body
+    # Try to include JSON body. Starlette has no request.is_json, so we sniff
+    # the content type the same way Flask 3 does.
     try:
-        if request.is_json:
-            response["json_body"] = request.get_json(force=True)
+        if _is_json_content_type(content_type):
+            response["json_body"] = await request.json()
     except Exception as e:
         response["json_parse_error"] = str(e)
 
-    # Try to include raw body
+    # Try to include raw body. Starlette uses awaitable request.body() in
+    # place of Flask's request.data property.
     try:
-        if request.data:
-            response["raw_body"] = request.data.decode("utf-8", errors="replace")
+        raw_body = await request.body()
+        if raw_body:
+            response["raw_body"] = raw_body.decode("utf-8", errors="replace")
     except Exception as e:
         response["raw_body_error"] = str(e)
 
-    return jsonify(response), 200
+    return JSONResponse(response, status_code=200)
 
 
-@testing_bp.route('/health', methods=['GET'])
-def health_check() -> Dict[str, Any]:
+@testing_router.route('/api/test/health', methods=['GET'])
+async def health_check(request: Request) -> Dict[str, Any]:
     """
     Simple health check endpoint.
 
     Returns:
         JSON response indicating service is running
     """
-    return jsonify({
+    return JSONResponse({
         "status": "healthy",
         "service": "api-demo testing endpoints",
         "demo_warning": "THIS IS A DEMO ENVIRONMENT - NOT FOR PRODUCTION USE",
@@ -370,4 +417,4 @@ def health_check() -> Dict[str, Any]:
             "/api/test/leak/headers": "Echo all request data",
             "/api/test/health": "Health check endpoint"
         }
-    }), 200
+    }, status_code=200)
