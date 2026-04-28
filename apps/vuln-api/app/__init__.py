@@ -201,7 +201,7 @@ def create_app(config=None):
     from app.blueprints.ecommerce import ecommerce_bp
     from app.blueprints.checkout import checkout_router
     from app.blueprints.payments import payments_router
-    from app.blueprints.insurance import insurance_bp
+    from app.blueprints.insurance import insurance_router
     from app.blueprints.integrations import integrations_bp
     from app.blueprints.saas import saas_router
     from app.blueprints.admin import admin_router
@@ -230,7 +230,6 @@ def create_app(config=None):
     app.register_blueprint(auth_bp)
     app.register_blueprint(healthcare_bp)
     app.register_blueprint(ecommerce_bp)
-    app.register_blueprint(insurance_bp)
     app.register_blueprint(integrations_bp)
     app.register_blueprint(testing_bp)
 
@@ -257,6 +256,7 @@ def create_app(config=None):
     register_flask_compat_routes(app, payments_router, endpoint_prefix="payments")
     register_flask_compat_routes(app, saas_router, endpoint_prefix="saas")
     register_flask_compat_routes(app, banking_router, endpoint_prefix="banking")
+    register_flask_compat_routes(app, insurance_router, endpoint_prefix="insurance")
     register_flask_compat_routes(app, diagnostics_router, endpoint_prefix="diagnostics")
     register_flask_compat_routes(app, throughput_router, endpoint_prefix="throughput")
     register_flask_compat_routes(app, recorder_router, endpoint_prefix="recorder")
