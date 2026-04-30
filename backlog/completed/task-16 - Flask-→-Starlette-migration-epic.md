@@ -1,11 +1,11 @@
 ---
 id: TASK-16
 title: Flask → Starlette migration (epic)
-status: In Progress
+status: Done
 assignee:
   - codex
 created_date: '2026-04-12 04:06'
-updated_date: '2026-04-16 19:25'
+updated_date: '2026-04-29 08:30'
 labels:
   - refactor
 dependencies: []
@@ -40,11 +40,11 @@ FastAPI's automatic Pydantic validation would silently block SQL injection paylo
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 All 28 blueprints running on Starlette
-- [ ] #2 Flask dependencies removed from pyproject.toml
-- [ ] #3 uvicorn replaces gunicorn in all Dockerfiles
-- [ ] #4 Full test suite passes on Starlette TestClient
-- [ ] #5 No regressions in intentional vulnerabilities (verified via representative vuln tests)
+- [x] #1 All 28 blueprints running on Starlette
+- [x] #2 Flask dependencies removed from pyproject.toml
+- [x] #3 uvicorn replaces gunicorn in all Dockerfiles
+- [x] #4 Full test suite passes on Starlette TestClient
+- [x] #5 No regressions in intentional vulnerabilities (verified via representative vuln tests)
 <!-- AC:END -->
 
 ## Implementation Plan
@@ -90,3 +90,44 @@ Latest source review artifact: .agents/reviews/review-20260414-200618.md (PASS W
 
 2026-04-16: TASK-16.2 is now in progress after migrating education, checkout, and mobile to Starlette. The repo remains mixed-mode, but 18 blueprints are now on Starlette and create_app() mirrors the new routers back into Flask for compatibility.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+## Flask → Starlette migration complete
+
+All 8 sub-tasks closed. The Chimera vuln-api now runs on Starlette/uvicorn end-to-end with zero Flask code paths.
+
+### Sub-task receipts
+
+- **16.1** — 11 Tier 2 blueprints migrated (standard routes).
+- **16.2** — 5 Tier 3 blueprints migrated (session-using).
+- **16.3** — 7 Tier 4 blueprints migrated (complex / mixed concerns).
+- **16.4** — ``database_vulnerable`` blueprint + Flask-SQLAlchemy → SQLAlchemy 2.0 + plain ``DeclarativeBase``. SQL injection vulnerabilities preserved end-to-end. ``app/orm.py`` now owns the ORM (renamed away from the package-shadowed ``app/models.py``).
+- **16.5** — Hotpatch decorator rewritten for Starlette ``Request`` / ``JSONResponse``; X-Chimera-* headers and JSON body injection preserved.
+- **16.6** — Middleware (TrafficRecorder, monitoring, error handlers) ported to ASGI.
+- **16.7** — Test suite migrated to Starlette TestClient. 717 → 492 tests after deleting the Flask-only parity / response-helper / validator suites that no longer have a target.
+- **16.8** — Infrastructure cutover: 3 Dockerfiles flipped to ``uvicorn app.asgi:app``; ``gunicorn.conf.py`` / ``wsgi.py`` / ``app.py`` deleted; ``app/__init__.py`` reduced to a re-export from ``app.asgi``; SPA serving (catch-all + ``/assets`` mount) ported to Starlette; pyproject stripped of Flask/Werkzeug/gunicorn/gevent/flasgger/asgiref; openapi-drift script rewritten to walk Starlette routes.
+
+### Final verification
+
+- ``grep 'from flask\|import flask' app/`` → 0 hits.
+- ``pytest tests/ --ignore=tests/integration`` → 492 passed, 1 skipped under both ``USE_DATABASE=false`` and ``USE_DATABASE=true``.
+- ``scripts/check_openapi_drift.py`` → zero drift.
+- ``uvicorn app.asgi:app`` boots; ``/healthz`` returns 200; SQL injection demos still vulnerable when ``USE_DATABASE=true`` (auth bypass, UNION leak, error-based info leak verified via ``TestClient``).
+- ``just run-secure 8089`` spawns 4 workers and serves traffic.
+
+### Acceptance criteria
+
+- #1 — All 28 blueprints on Starlette ✓
+- #2 — Flask deps removed ✓
+- #3 — uvicorn in all Dockerfiles ✓
+- #4 — Test suite green on TestClient ✓
+- #5 — Vulnerabilities preserved (verified via SQLi smoke + DEMO_MODE=full vulnerability tests) ✓
+
+### Out-of-scope follow-ups
+
+- Fargate redeploy smoke (no AWS access in this session).
+- ``app/cli.py`` may still have Flask remnants; not exercised in 16.x and not on the boot path.
+- ``datetime.utcnow()`` deprecation warnings (~140) are pre-existing and span seed data + monitoring; not addressed here.
+<!-- SECTION:FINAL_SUMMARY:END -->
