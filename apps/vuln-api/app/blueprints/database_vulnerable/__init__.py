@@ -1,15 +1,14 @@
 """
-Database vulnerable endpoints blueprint.
+Database vulnerable endpoints router.
 
-SECURITY WARNING: This blueprint contains INTENTIONALLY VULNERABLE endpoints
-for WAF SQL injection testing. These endpoints bypass ORM safety and use
-raw SQL queries with string interpolation.
-
-DO NOT use these patterns in production code.
+SECURITY WARNING: These routes are INTENTIONALLY VULNERABLE to SQL
+injection for WAF testing. They bypass ORM safety and execute raw SQL
+strings built via f-string interpolation. DO NOT use these patterns in
+production code.
 """
 
-from flask import Blueprint
+from app.routing import DecoratorRouter as Router
 
-db_vuln_bp = Blueprint('database_vulnerable', __name__)
+db_vuln_router = Router(routes=[])
 
-from . import routes
+from . import routes  # noqa: E402,F401  (decorator side-effects)
