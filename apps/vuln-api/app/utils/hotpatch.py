@@ -6,26 +6,11 @@ import logging
 from functools import wraps
 from typing import Any
 
-try:
-    from starlette.requests import Request as StarletteRequest
-    from starlette.responses import JSONResponse, Response as StarletteResponse
-except (
-    ImportError
-):  # pragma: no cover - Flask-first environments may not have Starlette yet.
-    StarletteRequest = None
-    JSONResponse = None
-    StarletteResponse = None
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse, Response as StarletteResponse
 
 from app.utils.security_config import security_config
 from app.utils.vuln_registry import VULN_REGISTRY
-
-try:
-    from flask import Response as FlaskResponse
-    from flask import make_response, request as flask_request
-except ImportError:  # pragma: no cover - Flask remains installed during cutover.
-    FlaskResponse = None
-    make_response = None
-    flask_request = None
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +94,7 @@ def _wants_education_headers(headers: Any) -> bool:
 
 
 def _parse_response_json(response: Any) -> dict[str, Any] | None:
-    if FlaskResponse is not None and isinstance(response, FlaskResponse):
-        return response.get_json(silent=True)
-
-    if StarletteResponse is None or not isinstance(response, StarletteResponse):
+    if not isinstance(response, StarletteResponse):
         return None
 
     content_type = response.headers.get("content-type", "")
@@ -142,15 +124,7 @@ def _inject_education_metadata(
 
         data["_chimera"] = _chimera_metadata(vid, meta, is_secure)
 
-        if FlaskResponse is not None and isinstance(response, FlaskResponse):
-            response.set_data(_json.dumps(data))
-            response.headers["Content-Length"] = str(len(response.get_data()))
-            return response
-
-        if JSONResponse is None:
-            return response
-
-        if StarletteResponse is not None and isinstance(response, StarletteResponse):
+        if isinstance(response, StarletteResponse):
             existing_headers = {
                 key: value
                 for key, value in response.headers.items()
@@ -160,21 +134,13 @@ def _inject_education_metadata(
             response.init_headers(existing_headers)
             return response
 
-        headers = {
-            key: value
-            for key, value in response.headers.items()
-            if key.lower() != "content-length"
-        }
-        return JSONResponse(data, status_code=response.status_code, headers=headers)
+        return response
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         logger.warning("Error injecting Chimera education metadata: %s", exc)
         return response
 
 
 def _ensure_starlette_response(result: Any) -> StarletteResponse:
-    if JSONResponse is None or StarletteResponse is None:
-        raise RuntimeError("Starlette response helpers are unavailable")
-
     if isinstance(result, StarletteResponse):
         return result
 
@@ -214,22 +180,9 @@ def _get_starlette_request(
     args: tuple[Any, ...], kwargs: dict[str, Any]
 ) -> StarletteRequest | None:
     candidates = list(args) + list(kwargs.values())
-
-    if StarletteRequest is not None:
-        for value in candidates:
-            if isinstance(value, StarletteRequest):
-                return value
-
-    # Accept duck-typed adapters (e.g. routing.FlaskRequestAdapter used by
-    # the Flask compat shim) that expose the .url.path / .headers surface
-    # _finalize_response actually consumes. Without this, async hotpatch
-    # routes invoked from the WSGI side fall through to make_response()
-    # against a Starlette JSONResponse, which Flask can't unwrap.
     for value in candidates:
-        url = getattr(value, "url", None)
-        if url is not None and hasattr(url, "path") and hasattr(value, "headers"):
+        if isinstance(value, StarletteRequest):
             return value
-
     return None
 
 
@@ -264,17 +217,6 @@ def hotpatch(vuln_type, vuln_id=None):
                         is_secure,
                     )
 
-                if make_response is not None and flask_request is not None:
-                    response = make_response(result)
-                    return _finalize_response(
-                        response,
-                        flask_request.path,
-                        flask_request.headers,
-                        config_attr,
-                        vuln_id,
-                        is_secure,
-                    )
-
                 return result
 
             return async_decorated_function
@@ -296,18 +238,7 @@ def hotpatch(vuln_type, vuln_id=None):
                     is_secure,
                 )
 
-            if make_response is None or flask_request is None:
-                return result
-
-            response = make_response(result)
-            return _finalize_response(
-                response,
-                flask_request.path,
-                flask_request.headers,
-                config_attr,
-                vuln_id,
-                is_secure,
-            )
+            return result
 
         return decorated_function
 

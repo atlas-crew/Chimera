@@ -78,13 +78,13 @@ class CSPMiddleware:
 
 
 # ---------------------------------------------------------------------------
-# Compat-shim error handler
+# Lightweight error handler
 # ---------------------------------------------------------------------------
-# Note: the production exception_handlers used by create_app live in
+# The production exception_handlers used by create_app live in
 # app.error_handlers_asgi (the rich DemoErrorHandler-equivalent). The
-# function below mirrors the lightweight body shape produced by the Flask
-# compat shim (register_flask_compat_routes in app.routing) so parity tests
-# that construct a test Starlette app against the shim contract stay valid.
+# function below mirrors the same body shape and is exposed for ad-hoc
+# Starlette test apps that want a minimal handler without pulling in the
+# full middleware stack.
 
 
 async def http_exception_handler(request: Request, exc: Exception):
@@ -195,6 +195,20 @@ def create_app(config: dict | None = None) -> Starlette:
     from app.blueprints.testing import testing_router
     from app.blueprints.auth import auth_router
 
+    # database_vulnerable is opt-in via USE_DATABASE=true. Initialize the
+    # SQLAlchemy engine once at app construction and only mount the router
+    # when the env flag is set, so production-style runs without USE_DATABASE
+    # don't pay the SQLite seed cost or expose the SQLi endpoints.
+    from app.database import init_database, is_database_enabled
+
+    db_enabled = is_database_enabled()
+    if db_enabled:
+        init_database()
+        from app.blueprints.database_vulnerable import db_vuln_router
+        print("✓ SQL injection test endpoints enabled")
+    else:
+        print("✓ In-memory mode (no database)")
+
     # Core infrastructure routes + routes from ported blueprints
     routes = [
         Route("/openapi.yaml", openapi_spec),
@@ -230,12 +244,34 @@ def create_app(config: dict | None = None) -> Starlette:
         *auth_router.routes,
     ]
 
-    # SPA static files
+    if db_enabled:
+        routes.extend(db_vuln_router.routes)
+
+    # SPA static files + catch-all. When the React frontend has been built
+    # into app/web_dist/ we mount /assets/* directly to disk and add a
+    # path-converter route that returns index.html for unknown non-API paths
+    # so React Router can resolve client-side routes (e.g., /banking).
     web_dist_dir = os.path.join(os.path.dirname(__file__), "web_dist")
-    if os.path.isdir(web_dist_dir):
+    spa_index = os.path.join(web_dist_dir, "index.html")
+    if os.path.isfile(spa_index):
         routes.append(
-            Mount("/assets", app=StaticFiles(directory=web_dist_dir), name="static")
+            Mount("/assets", app=StaticFiles(directory=os.path.join(web_dist_dir, "assets")), name="static")
         )
+
+        async def spa_catch_all(request: Request):
+            path = request.path_params.get("path", "")
+            # Let API routes 404 normally so the JSON error contract fires.
+            if path.startswith(("api/", "apidocs", "flasgger_static", "apispec")):
+                return JSONResponse({"error": "Not found"}, status_code=404)
+            # Serve real static files (JS, CSS, images) when present.
+            static_path = os.path.join(web_dist_dir, path)
+            if os.path.isfile(static_path):
+                return FileResponse(static_path)
+            # Everything else falls through to index.html — React Router takes over.
+            return FileResponse(spa_index, media_type="text/html")
+
+        routes.append(Route("/{path:path}", spa_catch_all, name="spa_catch_all"))
+
     # Keep precedence stable in both API-only and built-frontend environments.
     sort_routes_by_specificity(routes)
 

@@ -1,17 +1,17 @@
 """
 Routes for main endpoints.
 """
+import os
+
 from starlette.requests import Request
-from starlette.responses import JSONResponse, HTMLResponse
-from datetime import datetime, timedelta
-import uuid
-import random
-import json
-import time
+from starlette.responses import JSONResponse, HTMLResponse, FileResponse
 
 from . import main_router
-from app.models import *
 from app.utils import DEMO_PAGE_TEMPLATE
+
+
+_WEB_DIST_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "web_dist")
+_SPA_INDEX = os.path.join(_WEB_DIST_DIR, "index.html")
 
 @main_router.route('/healthz')
 @main_router.route('/api/v1/healthz')
@@ -36,7 +36,9 @@ async def healthz(request: Request):
 
 @main_router.route('/')
 async def home(request: Request):
-    """Main demo page showing available endpoints"""
+    """Serve the SPA when web_dist/index.html exists, else the demo template."""
+    if os.path.isfile(_SPA_INDEX):
+        return FileResponse(_SPA_INDEX, media_type="text/html")
     return HTMLResponse(DEMO_PAGE_TEMPLATE)
 
 

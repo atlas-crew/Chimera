@@ -1,4 +1,4 @@
-# Production Dockerfile for  WAF Demo API
+# Production Dockerfile for the Chimera WAF Demo API
 # Multi-stage build for minimal attack surface
 FROM python:3.12-slim AS builder
 
@@ -43,14 +43,10 @@ ENV PATH="/app/.venv/bin:$PATH" \
 WORKDIR /app
 
 # Copy application code
-COPY --chown=demowaf:demowaf wsgi.py /app/wsgi.py
-COPY --chown=demowaf:demowaf app.py /app/app.py
 COPY --chown=demowaf:demowaf app/ /app/app/
 COPY --chown=demowaf:demowaf static /app/static
-COPY --chown=demowaf:demowaf gunicorn.conf.py /app/
 
-# Security: Set read-only filesystem (app needs no write access)
-# Application state is in-memory only
+# Security: read-only filesystem — app state is in-memory only.
 RUN chown -R demowaf:demowaf /app
 
 # Switch to non-root user
@@ -63,5 +59,5 @@ EXPOSE 8880
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8880/healthz')" || exit 1
 
-# Run Gunicorn with gevent workers
-CMD ["uv", "run", "gunicorn", "-c", "gunicorn.conf.py", "wsgi:app"]
+# Run uvicorn with multiple workers; --log-level=info matches LOG_LEVEL above.
+CMD ["uv", "run", "uvicorn", "app.asgi:app", "--host", "0.0.0.0", "--port", "8880", "--workers", "4", "--log-level", "info"]

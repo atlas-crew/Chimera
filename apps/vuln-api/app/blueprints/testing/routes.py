@@ -279,24 +279,10 @@ async def leak_config(request: Request) -> Dict[str, Any]:
         JSON response with application configuration
     """
     # Leak all configuration via the framework-agnostic app_config singleton.
-    # current_app.config is Flask-only and not available under Starlette, so
-    # we surface the same vulnerability surface (secret_key, debug, testing,
-    # full config dump) through app_config to keep the AC behavior intact.
     config_dict = {key: repr(value) for key, value in app_config.items()}
-
-    # Best-effort leak of Flask-specific internals when reachable through the
-    # WSGI compat shim. Under native Starlette there's no current_app, so
-    # these stay empty (as advertised). Both errors are swallowed so the
-    # endpoint stays a stable demo target regardless of framework path.
-    blueprints: list = []
-    url_rules: list = []
-    try:
-        from flask import current_app as _ca
-
-        blueprints = list(_ca.blueprints.keys())
-        url_rules = [str(rule) for rule in _ca.url_map.iter_rules()]
-    except (ImportError, RuntimeError):
-        pass
+    url_rules = [
+        getattr(route, "path", "") for route in request.app.routes
+    ]
 
     return JSONResponse({
         "demo_warning": "THIS IS A DEMO - Intentionally leaking configuration",
@@ -304,7 +290,7 @@ async def leak_config(request: Request) -> Dict[str, Any]:
         "secret_key": app_config.secret_key,
         "debug": app_config.debug,
         "testing": app_config.testing,
-        "blueprints": blueprints,
+        "blueprints": [],  # Starlette has no blueprint concept
         "url_map": url_rules,
     }, status_code=200)
 

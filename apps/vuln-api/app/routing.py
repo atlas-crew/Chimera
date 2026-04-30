@@ -10,18 +10,10 @@ import inspect
 import json
 import re
 from functools import wraps
-from types import SimpleNamespace
 
-from asgiref.sync import async_to_sync
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response as StarletteResponse
 from starlette.routing import BaseRoute, Route, Router as _StarletteRouter
-
-
-async def _await_coro(coro):
-    """Adapter so async_to_sync can drive an already-created coroutine."""
-    return await coro
 
 
 async def safe_json(request):
@@ -86,40 +78,6 @@ def build_http_exception_body(
         }
 
     return body
-
-
-def _build_flask_response(*, body: bytes, status: int, raw_headers) -> "FlaskResponse":
-    from flask import Response as FlaskResponse
-
-    content_type = None
-    for header, value in raw_headers:
-        if header.decode("latin-1").lower() == "content-type":
-            content_type = value.decode("latin-1")
-            break
-
-    response = FlaskResponse(body, status=status, content_type=content_type)
-    for header, value in raw_headers:
-        header_name = header.decode("latin-1")
-        if header_name.lower() in {"content-length", "content-type"}:
-            continue
-        response.headers.add(header_name, value.decode("latin-1"))
-    return response
-
-
-class _AdapterURL:
-    def __init__(self, flask_request, path: str, query: str = ""):
-        self._request = flask_request
-        self.path = path
-        self.query = query
-        self.scheme = flask_request.scheme
-        self.hostname = flask_request.host.split(":", 1)[0] if flask_request.host else None
-        port = flask_request.environ.get("SERVER_PORT")
-        self.port = int(port) if port else None
-        self.netloc = flask_request.host
-        self.is_secure = flask_request.is_secure
-
-    def __str__(self) -> str:
-        return self._request.url
 
 
 class DecoratorRouter(_StarletteRouter):
@@ -258,145 +216,3 @@ async def get_json_value(request: Request, default=None):
     return data
 
 
-class FlaskRequestAdapter:
-    """Expose the Starlette request surface migrated handlers rely on."""
-
-    def __init__(self, flask_request, path_params: dict[str, str]):
-        from flask import session as flask_session
-
-        self._request = flask_request
-        self.path_params = path_params
-        self.query_params = flask_request.args
-        self.headers = flask_request.headers
-        self.method = flask_request.method
-        self.url = _AdapterURL(flask_request, flask_request.path, flask_request.query_string.decode())
-        self.cookies = flask_request.cookies
-        self.session = flask_session
-        self.state = SimpleNamespace()
-        self.client = SimpleNamespace(host=flask_request.remote_addr, port=None)
-
-    async def json(self):
-        raw = self._request.get_data(cache=True)
-        if not raw:
-            return None
-        return json.loads(raw)
-
-    async def body(self):
-        return self._request.get_data()
-
-    async def form(self):
-        from werkzeug.datastructures import CombinedMultiDict
-
-        # Transitional compat: file entries remain Werkzeug FileStorage objects
-        # instead of Starlette UploadFile instances. Current migrated handlers
-        # only rely on shared attributes such as filename, so this is enough.
-        return CombinedMultiDict([self._request.form, self._request.files])
-
-
-def _coerce_flask_response(result):
-    from flask import Response as FlaskResponse
-
-    if isinstance(result, FlaskResponse):
-        return result
-
-    if isinstance(result, StarletteResponse):
-        raw_headers = getattr(result, "raw_headers", [])
-        body = getattr(result, "body", None)
-
-        if body is not None:
-            response = _build_flask_response(body=body, status=result.status_code, raw_headers=raw_headers)
-            media_type = getattr(result, "media_type", None)
-            if media_type and "Content-Type" not in response.headers:
-                response.mimetype = media_type
-            return response
-
-        async def _render_starlette_response():
-            # Transitional fallback for response types like StreamingResponse that
-            # do not populate body eagerly; this scope is only intended for
-            # body-only rendering and not for responses that inspect request metadata.
-            scope = {
-                "type": "http",
-                "http_version": "1.1",
-                "method": "GET",
-                "path": "/",
-                "raw_path": b"/",
-                "query_string": b"",
-                "headers": [],
-            }
-            started = {"status": getattr(result, "status_code", 200), "headers": []}
-            body_parts: list[bytes] = []
-            receive_count = 0
-
-            async def receive():
-                nonlocal receive_count
-                receive_count += 1
-                if receive_count == 1:
-                    return {"type": "http.request", "body": b"", "more_body": False}
-                return {"type": "http.disconnect"}
-
-            async def send(message):
-                if message["type"] == "http.response.start":
-                    started["status"] = message["status"]
-                    started["headers"] = message.get("headers", [])
-                elif message["type"] == "http.response.body":
-                    body_parts.append(message.get("body", b""))
-
-            await result(scope, receive, send)
-            response = _build_flask_response(
-                body=b"".join(body_parts),
-                status=started["status"],
-                raw_headers=started["headers"],
-            )
-            media_type = getattr(result, "media_type", None)
-            if media_type and "Content-Type" not in response.headers:
-                response.mimetype = media_type
-            return response
-
-        return async_to_sync(_render_starlette_response)()
-
-    return result
-
-
-def register_flask_compat_routes(app, router: DecoratorRouter, *, endpoint_prefix: str) -> None:
-    """Mirror migrated Starlette routes into Flask while the transition is in flight.
-
-    This bridge is intentionally WSGI-only transitional glue; it executes async
-    handlers via asgiref.async_to_sync so create_app() can keep serving migrated
-    Starlette routes until the full cutover is complete. async_to_sync is used
-    instead of asyncio.run because the latter races with gevent-patched I/O
-    under gunicorn's gevent worker and intermittently leaves coroutines
-    un-awaited, producing 500s.
-    """
-    from flask import request as flask_request
-
-    for index, route in enumerate(router.routes):
-        methods = sorted(method for method in (route.methods or {"GET"}) if method not in {"HEAD", "OPTIONS"})
-        flask_path = DecoratorRouter._denormalize_path(getattr(route, "path", ""))
-        safe_path = re.sub(r"[^a-zA-Z0-9_]+", "_", flask_path).strip("_") or "root"
-        endpoint_name = f"{endpoint_prefix}_{index}_{safe_path}"
-
-        def compat_view(_route=route, **kwargs):
-            adapter = FlaskRequestAdapter(flask_request, kwargs)
-            try:
-                endpoint = _route.endpoint
-                if inspect.iscoroutinefunction(endpoint) or inspect.iscoroutinefunction(getattr(endpoint, "__wrapped__", None)):
-                    result = async_to_sync(endpoint)(adapter)
-                else:
-                    result = endpoint(adapter)
-                    if inspect.isawaitable(result):
-                        result = async_to_sync(_await_coro)(result)
-            except HTTPException as exc:
-                result = JSONResponse(
-                    build_http_exception_body(
-                        status_code=exc.status_code,
-                        detail=exc.detail,
-                        path=flask_request.path,
-                        method=flask_request.method,
-                        headers=dict(flask_request.headers),
-                        query_params=dict(flask_request.args),
-                    ),
-                    status_code=exc.status_code,
-                )
-            return _coerce_flask_response(result)
-
-        app.add_url_rule(flask_path, endpoint=endpoint_name, view_func=compat_view, methods=methods)

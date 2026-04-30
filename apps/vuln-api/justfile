@@ -78,15 +78,15 @@ test-modes:
 run: run-vulnerable
 
 # Run in vulnerable mode (DEMO_MODE=full)
-run-vulnerable:
+run-vulnerable PORT="8880":
     @echo "⚠️  Starting in VULNERABLE mode (DEMO_MODE=full)"
     @echo "    This mode has intentional security vulnerabilities for testing!"
-    DEMO_MODE=full FLASK_ENV=development {{uv}} run python -m gunicorn 'app:create_app()' --config gunicorn.conf.py
+    DEMO_MODE=full {{uv}} run uvicorn app.asgi:app --host 0.0.0.0 --port {{PORT}} --reload
 
 # Run in secure mode (DEMO_MODE=strict)
-run-secure:
+run-secure PORT="8880":
     @echo "Starting in SECURE mode (DEMO_MODE=strict)"
-    DEMO_MODE=strict FLASK_ENV=production {{uv}} run python -m gunicorn 'app:create_app()' --config gunicorn.conf.py
+    DEMO_MODE=strict {{uv}} run uvicorn app.asgi:app --host 0.0.0.0 --port {{PORT}} --workers 4
 
 # ── Quality ──────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-# Flask application for  WAF Demo API endpoints
+# Starlette/uvicorn application for the Chimera WAF Demo API (dev)
 FROM python:3.12-slim
 
 # Install uv
@@ -13,17 +13,14 @@ COPY pyproject.toml uv.lock /app/
 # Install dependencies using uv
 RUN uv sync --frozen --no-dev
 
-# Copy Flask application package, entry point, and static files
+# Copy application package and static assets
 COPY app/ /app/app/
-COPY app.py /app/app.py
 COPY static /app/static
 
 # Expose port 80 for internal access
 EXPOSE 80
 
-# Set environment variable for Flask port
 ENV PORT=80
 
-# Run Flask application
-# Note: Running as root is acceptable for this demo/honeypot environment
-CMD ["uv", "run", "python", "app.py"]
+# Note: running as root is acceptable for this demo/honeypot environment
+CMD ["uv", "run", "uvicorn", "app.asgi:app", "--host", "0.0.0.0", "--port", "80", "--reload"]

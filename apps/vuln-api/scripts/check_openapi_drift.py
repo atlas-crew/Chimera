@@ -67,37 +67,60 @@ def load_live_routes() -> dict[tuple[str, str], str]:
 
     sys.path.insert(0, str(REPO_DIR))
 
-    # Force in-memory mode regardless of caller env. The SQLAlchemy init path
-    # (app/database.py) imports symbols that no longer exist in app.models
-    # post-Starlette migration, so USE_DATABASE=true would fail at app startup.
-    # The drift checker only enumerates route declarations, so we don't need a
-    # working database — and we manually register db_vuln_bp below to cover the
-    # routes that are normally gated behind the env flag.
+    # Walk the Starlette app's route table. The drift checker only enumerates
+    # route declarations, so we don't need a working SQLite engine — and we
+    # manually pull in db_vuln_router below to cover the routes that are
+    # normally gated behind USE_DATABASE=true.
     os.environ['USE_DATABASE'] = 'false'
 
-    from app import create_app
+    from starlette.routing import Route
 
-    # create_app() in app/__init__.py prints boot messages to stdout;
-    # redirect them to stderr so --json output stays machine-readable.
+    from app.asgi import create_app
+    from app.blueprints.database_vulnerable import db_vuln_router
+
+    # create_app() prints boot messages to stdout; redirect them to stderr
+    # so --json output stays machine-readable.
     with contextlib.redirect_stdout(sys.stderr):
         app = create_app()
-        # The database_vulnerable blueprint defines real, documentable routes
-        # but is conditionally registered only when USE_DATABASE=true. Register
-        # it unconditionally for drift purposes — its SQLAlchemy import is
-        # lazy (inside get_db_connection), so registration is side-effect-free.
-        if 'database_vulnerable' not in app.blueprints:
-            from app.blueprints.database_vulnerable import db_vuln_bp
-            app.register_blueprint(db_vuln_bp)
+        live_routes = list(app.routes)
+        # database_vulnerable is opt-in via USE_DATABASE; pull its routes in
+        # so they appear in the drift inventory regardless of the env flag.
+        # Dedup by (path, frozenset(methods)) — healthcare and database_vulnerable
+        # both register /api/v1/healthcare/records but with different methods.
+        existing = {
+            (r.path, frozenset(r.methods or set()))
+            for r in live_routes if isinstance(r, Route)
+        }
+        for route in db_vuln_router.routes:
+            if not isinstance(route, Route):
+                continue
+            key = (route.path, frozenset(route.methods or set()))
+            if key not in existing:
+                live_routes.append(route)
+
     routes: dict[tuple[str, str], str] = {}
-    for rule in app.url_map.iter_rules():
-        if rule.rule in IGNORED_PATHS:
+    for route in live_routes:
+        if not isinstance(route, Route):
             continue
-        if any(rule.rule.startswith(prefix) for prefix in IGNORED_PATH_PREFIXES):
+        # Starlette stores paths in {name} / {name:converter} form; convert
+        # to the Flask <converter:name> shape used by the spec normalization.
+        starlette_path = route.path
+        flask_path = re.sub(
+            r"\{(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)(?::(?P<conv>[a-zA-Z_][a-zA-Z0-9_]*))?\}",
+            lambda m: (
+                f"<{m.group('conv')}:{m.group('name')}>" if m.group("conv")
+                else f"<{m.group('name')}>"
+            ),
+            starlette_path,
+        )
+        if flask_path in IGNORED_PATHS:
             continue
-        normalized = _normalize_flask(rule.rule)
-        methods = (rule.methods or set()) - IGNORED_METHODS
+        if any(flask_path.startswith(prefix) for prefix in IGNORED_PATH_PREFIXES):
+            continue
+        normalized = _normalize_flask(flask_path)
+        methods = set(route.methods or set()) - IGNORED_METHODS
         for method in methods:
-            routes[(normalized, method)] = rule.rule
+            routes[(normalized, method)] = flask_path
     return routes
 
 
