@@ -27,7 +27,7 @@ class TestPatientRecords:
         response = client.get('/api/v1/healthcare/records')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'records' in data
         assert len(data['records']) > 0
         assert 'warning' in data
@@ -42,7 +42,7 @@ class TestPatientRecords:
     def test_list_records_phi_exposure(self, client, mock_medical_records):
         """Test that sensitive PHI fields are exposed."""
         response = client.get('/api/v1/healthcare/records')
-        data = response.get_json()
+        data = response.json()
 
         for record in data['records']:
             # All PHI fields should be present
@@ -58,7 +58,7 @@ class TestPatientRecords:
         response = client.get('/api/v1/healthcare/records/REC-001')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['record_id'] == 'REC-001'
         assert 'patient_info' in data
         assert 'ssn' in data['patient_info']
@@ -73,7 +73,7 @@ class TestPatientRecords:
     def test_record_details_complete_phi(self, client, mock_medical_records):
         """Test that complete PHI is exposed in details."""
         response = client.get('/api/v1/healthcare/records/REC-001')
-        data = response.get_json()
+        data = response.json()
 
         # Patient info PHI
         assert data['patient_info']['ssn'] == '123-45-6789'
@@ -97,7 +97,7 @@ class TestRecordSearch:
             response = client.get(f'/api/v1/healthcare/records/search?q={payload}')
 
             assert response.status_code == 200
-            data = response.get_json()
+            data = response.json()
 
             if 'vulnerability' in data:
                 assert data['vulnerability'] == 'SQL_INJECTION_DETECTED'
@@ -109,7 +109,7 @@ class TestRecordSearch:
         payload = "' UNION SELECT * FROM users--"
         response = client.get(f'/api/v1/healthcare/records/search?q={payload}')
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'SQL_INJECTION_DETECTED'
         assert 'query' in data
         assert 'UNION' in data['query']
@@ -119,14 +119,14 @@ class TestRecordSearch:
         payload = "' OR '1'='1"
         response = client.get(f'/api/v1/healthcare/records/search?q={payload}')
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
 
     def test_search_by_ssn_enumeration(self, client, mock_medical_records):
         """Test SSN-based search allows enumeration."""
         response = client.get('/api/v1/healthcare/records/search?ssn=123-45-6789')
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert 'results' in data
         # SSN should be searchable, exposing records
@@ -137,7 +137,7 @@ class TestRecordSearch:
         """Test normal search returns results."""
         response = client.get('/api/v1/healthcare/records/search?name=John')
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert 'results' in data
 
@@ -157,7 +157,7 @@ class TestFileUpload:
                 }
             )
 
-            data = response.get_json()
+            data = response.json()
             assert response.status_code == 200
             assert data['vulnerability'] == 'PATH_TRAVERSAL'
             assert 'potential_paths' in data
@@ -173,7 +173,7 @@ class TestFileUpload:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'PATH_TRAVERSAL'
         assert '/etc/passwd' in str(data['potential_paths'])
 
@@ -188,7 +188,7 @@ class TestFileUpload:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'PATH_TRAVERSAL'
 
     def test_upload_normal_file(self, client):
@@ -202,7 +202,7 @@ class TestFileUpload:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert data['status'] == 'uploaded'
         assert 'warning' in data  # Still vulnerable to unrestricted upload
@@ -216,7 +216,7 @@ class TestAppointments:
         response = client.get('/api/v1/healthcare/appointments')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'appointments' in data
         assert len(data['appointments']) > 0
 
@@ -237,7 +237,7 @@ class TestAppointments:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert data['status'] == 'scheduled'
         assert 'warning' in data
@@ -249,7 +249,7 @@ class TestAppointments:
             json={'appointment_id': 'APT-12345678'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert data['status'] == 'cancelled'
         assert 'warning' in data
@@ -264,7 +264,7 @@ class TestPrescriptions:
         response = client.get('/api/v1/healthcare/prescriptions')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'prescriptions' in data
         assert len(data['prescriptions']) > 0
         assert 'warning' in data
@@ -285,7 +285,7 @@ class TestPrescriptions:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert data['status'] == 'approved'
         assert 'warning' in data
@@ -296,7 +296,7 @@ class TestPrescriptions:
         response = client.get('/api/v1/healthcare/prescriptions/history?patient_id=PAT-9999')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'prescription_history' in data
         assert len(data['prescription_history']) > 0
 
@@ -309,7 +309,7 @@ class TestInsurance:
         response = client.get('/api/v1/insurance/policies')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'policies' in data
         assert len(data['policies']) > 0
 
@@ -326,7 +326,7 @@ class TestInsurance:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert data['status'] == 'submitted'
         assert data['claim']['billed_amount'] == 99999
@@ -336,7 +336,7 @@ class TestInsurance:
         response = client.get('/api/v1/insurance/claims/CLM-001')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['claim_id'] == 'CLM-001'
 
     def test_check_coverage_enumeration(self, client):
@@ -346,7 +346,7 @@ class TestInsurance:
         )
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'covered' in data
         assert 'coverage_percentage' in data
 
@@ -359,7 +359,7 @@ class TestLegacyEndpoints:
         response = client.get('/api/hipaa/directory')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'healthcare_systems' in data
         assert 'total_providers' in data
         assert 'api_endpoints' in data
@@ -369,7 +369,7 @@ class TestLegacyEndpoints:
         response = client.get('/api/medical/phi/endpoints')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'phi_endpoints' in data
         assert len(data['phi_endpoints']) > 0
         assert 'access_levels' in data
@@ -383,7 +383,7 @@ class TestGeneticData:
         response = client.get('/api/medical/genetics/profiles?patient_id=PAT-1001')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'genetic_profile' in data
         assert 'risk_factors' in data['genetic_profile']
         assert 'ancestry' in data['genetic_profile']
@@ -394,7 +394,7 @@ class TestGeneticData:
         """Test complete genetic profile is exposed."""
         response = client.get('/api/medical/genetics/profiles')
 
-        data = response.get_json()
+        data = response.json()
         profile = data['genetic_profile']
         assert 'risk_factors' in profile
         assert 'pharmacogenomics' in profile
@@ -410,7 +410,7 @@ class TestMentalHealth:
         response = client.get('/api/medical/mental-health/sessions?patient_id=PAT-1001')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'mental_health_sessions' in data
         assert len(data['mental_health_sessions']) > 0
         assert 'warning' in data
@@ -419,7 +419,7 @@ class TestMentalHealth:
         """Test that sensitive mental health data is exposed."""
         response = client.get('/api/medical/mental-health/sessions')
 
-        data = response.get_json()
+        data = response.json()
         session = data['mental_health_sessions'][0]
         assert 'diagnosis' in session
         assert 'notes' in session
@@ -435,7 +435,7 @@ class TestBulkExport:
         response = client.get('/api/hipaa/export/bulk?format=json&count=100')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['status'] == 'completed'
         assert data['record_count'] == 100
         assert 'warning' in data
@@ -446,7 +446,7 @@ class TestBulkExport:
         response = client.get('/api/hipaa/export/bulk?count=10000')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['record_count'] == 10000
 
 
@@ -463,7 +463,7 @@ class TestSSRF:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'SSRF_DETECTED'
         assert 'accessible_services' in data
 
@@ -477,7 +477,7 @@ class TestSSRF:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'SSRF_DETECTED'
 
     def test_transfer_ssrf_internal_network(self, client):
@@ -490,7 +490,7 @@ class TestSSRF:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'SSRF_DETECTED'
 
     def test_transfer_normal(self, client):
@@ -503,7 +503,7 @@ class TestSSRF:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['status'] == 'completed'
         assert 'warning' in data  # Still warns about no encryption
 
@@ -518,7 +518,7 @@ class TestXXE:
             json={'config_xml': xxe_injection_payloads[0]}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'XXE_INJECTION_DETECTED'
         assert 'exposed_files' in data
         assert '/etc/passwd' in data['exposed_files']
@@ -536,7 +536,7 @@ class TestXXE:
             json={'config_xml': xml}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'XXE_INJECTION_DETECTED'
 
 
@@ -550,7 +550,7 @@ class TestDeserialization:
             json={'config_data': deserialization_payloads[0]}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'INSECURE_DESERIALIZATION'
         assert data['message'] == 'Arbitrary code execution possible'
 
@@ -563,7 +563,7 @@ class TestDeserialization:
             json={'config_data': malicious_payload}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'INSECURE_DESERIALIZATION'
 
 
@@ -580,7 +580,7 @@ class TestAuditLogManipulation:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert data['status'] == 'deleted'
         assert data['logs_deleted'] == 3
@@ -597,7 +597,7 @@ class TestAuditLogManipulation:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['status'] == 'modified'
         assert data['integrity_check'] == 'failed'
 
@@ -629,7 +629,7 @@ class TestSecurityControls:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['encryption'] == 'none'
 
 
@@ -641,7 +641,7 @@ class TestCriticalVulnerabilities:
         response = client.get('/api/v1/healthcare/records')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         # This is a critical HIPAA violation
         assert any('ssn' in record for record in data['records'])
 
@@ -649,7 +649,7 @@ class TestCriticalVulnerabilities:
         """Critical: SQL injection enables database compromise."""
         response = client.get('/api/v1/healthcare/records/search?q=\' UNION SELECT * FROM users--')
 
-        data = response.get_json()
+        data = response.json()
         if 'vulnerability' in data:
             # Admin credentials exposed via SQL injection
             assert 'admin_credentials' in data['exposed_data']
@@ -658,7 +658,7 @@ class TestCriticalVulnerabilities:
         """Critical: Genetic information exposed without consent."""
         response = client.get('/api/medical/genetics/profiles?patient_id=PAT-1001')
 
-        data = response.get_json()
+        data = response.json()
         # Genetic data is highest sensitivity PHI
         assert 'genetic_profile' in data
         assert 'risk_factors' in data['genetic_profile']
@@ -670,7 +670,7 @@ class TestCriticalVulnerabilities:
             json={'action': 'delete', 'target_logs': ['all']}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['recovery_possible'] is False
 
 
@@ -680,19 +680,19 @@ class TestProviderAndImaging:
     def test_provider_directory_idor(self, client):
         response = client.get('/api/v1/healthcare/providers/PROV-777')
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['provider']['provider_id'] == 'PROV-777'
 
     def test_imaging_download_idor(self, client, mock_medical_records):
         response = client.get('/api/v1/healthcare/imaging/REC-001/download?include_phi=true')
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['imaging']['record_id'] == 'REC-001'
         assert data['include_phi'] is True
 
     def test_lab_results_export(self, client, mock_medical_records):
         response = client.get('/api/v1/healthcare/lab-results/export?include_phi=true')
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['include_phi'] is True
         assert isinstance(data['results'], list)

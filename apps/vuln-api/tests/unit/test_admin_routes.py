@@ -26,7 +26,7 @@ class TestUserManagement:
         response = client.get('/api/v1/admin/users')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'users' in data
         assert len(data['users']) > 0
         assert 'warning' in data
@@ -36,7 +36,7 @@ class TestUserManagement:
         """Test that password hashes are exposed."""
         response = client.get('/api/v1/admin/users')
 
-        data = response.get_json()
+        data = response.json()
         for user in data['users']:
             assert 'password_hash' in user
             assert 'api_key' in user
@@ -46,7 +46,7 @@ class TestUserManagement:
         """Test that all sensitive user fields are exposed."""
         response = client.get('/api/v1/admin/users')
 
-        data = response.get_json()
+        data = response.json()
         user = data['users'][0]
         required_fields = [
             'user_id', 'username', 'email', 'role', 'password_hash',
@@ -61,14 +61,14 @@ class TestUserManagement:
         response = client.get('/api/v1/admin/users/USR-9999')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['user_id'] == 'USR-9999'
 
     def test_get_user_security_questions_exposed(self, client, mock_users):
         """Test that security questions are exposed."""
         response = client.get('/api/v1/admin/users/USR-0001')
 
-        data = response.get_json()
+        data = response.json()
         assert 'security_questions' in data
         assert len(data['security_questions']) > 0
         assert 'answer_hash' in data['security_questions'][0]
@@ -77,7 +77,7 @@ class TestUserManagement:
         """Test that login history is exposed."""
         response = client.get('/api/v1/admin/users/USR-0001')
 
-        data = response.get_json()
+        data = response.json()
         assert 'login_history' in data
         assert len(data['login_history']) > 0
         for entry in data['login_history']:
@@ -91,7 +91,7 @@ class TestUserManagement:
             json={'role': 'admin'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert data['status'] == 'elevated'
         assert data['new_role'] == 'admin'
@@ -104,7 +104,7 @@ class TestUserManagement:
             json={'role': 'admin'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['previous_role'] == 'user'
         assert data['new_role'] == 'admin'
 
@@ -115,7 +115,7 @@ class TestUserManagement:
             json={'role': 'superadmin'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['new_role'] == 'superadmin'
 
 
@@ -127,7 +127,7 @@ class TestUserExport:
         response = client.get('/api/v1/admin/users/export')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'users' in data
         assert len(data['users']) > 0
         assert 'warning' in data
@@ -136,7 +136,7 @@ class TestUserExport:
         """Test that export can include plaintext passwords."""
         response = client.get('/api/v1/admin/users/export?include_passwords=true')
 
-        data = response.get_json()
+        data = response.json()
         assert data['includes_passwords'] is True
         for user in data['users']:
             assert 'password_hash' in user
@@ -146,7 +146,7 @@ class TestUserExport:
         """Test that export includes PII data."""
         response = client.get('/api/v1/admin/users/export')
 
-        data = response.get_json()
+        data = response.json()
         user = data['users'][0]
         pii_fields = ['ssn', 'phone', 'address', 'email']
         for field in pii_fields:
@@ -156,14 +156,14 @@ class TestUserExport:
         """Test export with different format options."""
         for fmt in ['json', 'csv', 'xml']:
             response = client.get(f'/api/v1/admin/users/export?format={fmt}')
-            data = response.get_json()
+            data = response.json()
             assert data['format'] == fmt
 
     def test_export_large_dataset(self, client):
         """Test exporting large user dataset."""
         response = client.get('/api/v1/admin/users/export')
 
-        data = response.get_json()
+        data = response.json()
         assert data['total_count'] == 100  # Large export without limits
 
 
@@ -178,7 +178,7 @@ class TestSystemConfiguration:
         )
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['status'] == 'updated'
         assert 'config' in data
 
@@ -187,7 +187,7 @@ class TestSystemConfiguration:
         response = client.get('/api/v1/admin/config')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'database' in data
         assert 'api_keys' in data
         assert 'security' in data
@@ -197,7 +197,7 @@ class TestSystemConfiguration:
         """Test that database credentials are exposed."""
         response = client.get('/api/v1/admin/config')
 
-        data = response.get_json()
+        data = response.json()
         db_config = data['database']
         assert 'host' in db_config
         assert 'username' in db_config
@@ -208,7 +208,7 @@ class TestSystemConfiguration:
         """Test that API keys are fully exposed."""
         response = client.get('/api/v1/admin/config')
 
-        data = response.get_json()
+        data = response.json()
         api_keys = data['api_keys']
         assert 'stripe' in api_keys
         assert 'sendgrid' in api_keys
@@ -219,7 +219,7 @@ class TestSystemConfiguration:
         """Test that AWS credentials are exposed."""
         response = client.get('/api/v1/admin/config')
 
-        data = response.get_json()
+        data = response.json()
         aws = data['api_keys']['aws']
         assert 'access_key_id' in aws
         assert 'secret_access_key' in aws
@@ -229,7 +229,7 @@ class TestSystemConfiguration:
         """Test that security secrets are exposed."""
         response = client.get('/api/v1/admin/config')
 
-        data = response.get_json()
+        data = response.json()
         security = data['security']
         assert 'secret_key' in security
         assert 'jwt_secret' in security
@@ -239,7 +239,7 @@ class TestSystemConfiguration:
         """Test that dangerous features are shown as enabled."""
         response = client.get('/api/v1/admin/config')
 
-        data = response.get_json()
+        data = response.json()
         features = data['features']
         assert features['debug_mode'] is True
         assert features['detailed_errors'] is True
@@ -255,7 +255,7 @@ class TestSystemConfiguration:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert data['status'] == 'updated'
 
@@ -268,7 +268,7 @@ class TestSystemLogs:
         response = client.get('/api/v1/admin/logs')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'logs' in data
 
     def test_view_logs_invalid_line_count_falls_back_to_default(self, client):
@@ -276,7 +276,7 @@ class TestSystemLogs:
         response = client.get('/api/v1/admin/logs?lines=abc')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['total_lines'] == 100
         assert len(data['logs']) == 100
         assert len(data['logs']) > 0
@@ -286,7 +286,7 @@ class TestSystemLogs:
         """Test that logs contain sensitive information."""
         response = client.get('/api/v1/admin/logs?lines=100')
 
-        data = response.get_json()
+        data = response.json()
         log_messages = [log['message'] for log in data['logs']]
 
         # Check for sensitive info in logs
@@ -302,14 +302,14 @@ class TestSystemLogs:
         log_types = ['application', 'security', 'access', 'error']
         for log_type in log_types:
             response = client.get(f'/api/v1/admin/logs?type={log_type}')
-            data = response.get_json()
+            data = response.json()
             assert data['log_type'] == log_type
 
     def test_logs_line_limit(self, client):
         """Test log line limit parameter."""
         response = client.get('/api/v1/admin/logs?lines=500')
 
-        data = response.get_json()
+        data = response.json()
         assert data['total_lines'] == 500
 
 
@@ -327,7 +327,7 @@ class TestCommandInjection:
                 }
             )
 
-            data = response.get_json()
+            data = response.json()
             if 'vulnerability' in data:
                 assert data['vulnerability'] == 'COMMAND_INJECTION_DETECTED'
                 assert 'executed_command' in data
@@ -339,7 +339,7 @@ class TestCommandInjection:
             json={'backup_path': '/tmp; cat /etc/passwd'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'COMMAND_INJECTION_DETECTED'
         assert 'root:x:0:0' in data['injected_output']
 
@@ -350,7 +350,7 @@ class TestCommandInjection:
             json={'backup_path': '/tmp | ls -la /'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'COMMAND_INJECTION_DETECTED'
 
     def test_backup_backtick_injection(self, client):
@@ -360,7 +360,7 @@ class TestCommandInjection:
             json={'backup_path': '/tmp`whoami`'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'COMMAND_INJECTION_DETECTED'
 
     def test_backup_normal_path(self, client):
@@ -373,7 +373,7 @@ class TestCommandInjection:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['status'] == 'started'
         assert 'backup_id' in data
 
@@ -389,7 +389,7 @@ class TestRemoteCodeExecution:
         )
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['status'] == 'executed'
 
     def test_execute_dangerous_command(self, client):
@@ -401,7 +401,7 @@ class TestRemoteCodeExecution:
                 json={'command': cmd, 'args': ['-rf', '/']}
             )
 
-            data = response.get_json()
+            data = response.json()
             assert data['is_dangerous'] is True
 
     def test_execute_command_injection(self, client):
@@ -411,7 +411,7 @@ class TestRemoteCodeExecution:
             json={'command': 'ls; cat /etc/passwd'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'COMMAND_INJECTION'
         assert 'root:x:0:0' in data['output']
 
@@ -422,7 +422,7 @@ class TestRemoteCodeExecution:
             json={'command': 'ls | grep config'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'COMMAND_INJECTION'
 
     def test_execute_multiline_injection(self, client):
@@ -432,7 +432,7 @@ class TestRemoteCodeExecution:
             json={'command': 'ls\ncat /etc/passwd'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['vulnerability'] == 'COMMAND_INJECTION'
 
     def test_execute_file_disclosure(self, client):
@@ -442,7 +442,7 @@ class TestRemoteCodeExecution:
             json={'command': 'cat; cat /etc/passwd'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert 'database.yml' in data['output'] or 'api_keys.json' in data['output']
 
 
@@ -459,7 +459,7 @@ class TestAttackSimulation:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['test'] == 'SQL_INJECTION'
         assert data['status'] == 'vulnerable'
         assert 'exposed_data' in data['result']
@@ -471,7 +471,7 @@ class TestAttackSimulation:
             json={'query': "username='admin' OR 1=1--"}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['status'] == 'vulnerable'
         assert 'exposed_tables' in data['result']
 
@@ -482,7 +482,7 @@ class TestAttackSimulation:
             json={'query': "'; DROP TABLE users; --"}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['status'] == 'vulnerable'
 
     def test_xxe_injection_simulation(self, client, xxe_injection_payloads):
@@ -492,7 +492,7 @@ class TestAttackSimulation:
             json={'xml': xxe_injection_payloads[0]}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['test'] == 'XXE_INJECTION'
         assert data['status'] == 'vulnerable'
         assert '/etc/passwd' in data['result']['exposed_files']
@@ -506,7 +506,7 @@ class TestAttackSimulation:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['status'] == 'vulnerable'
         assert 'file_content' in data['result']
 
@@ -518,7 +518,7 @@ class TestAttackSimulation:
                 json={'url': payload, 'method': 'GET'}
             )
 
-            data = response.get_json()
+            data = response.json()
             if 'vulnerability' in data:
                 assert data['test'] == 'SSRF'
                 assert data['status'] == 'vulnerable'
@@ -530,7 +530,7 @@ class TestAttackSimulation:
             json={'url': 'http://169.254.169.254/latest/meta-data/'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['status'] == 'vulnerable'
         assert 'metadata' in data['result']['response_body']
         assert 'credentials' in data['result']['response_body']['metadata']
@@ -542,7 +542,7 @@ class TestAttackSimulation:
             json={'url': 'http://localhost:8080/admin'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert 'internal_services' in data['result']
 
     def test_deserialization_simulation(self, client, deserialization_payloads):
@@ -555,7 +555,7 @@ class TestAttackSimulation:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['test'] == 'DESERIALIZATION'
         assert data['status'] == 'vulnerable'
 
@@ -567,7 +567,7 @@ class TestAttackSimulation:
             json={'data': payload}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['result']['code_executed'] is True
         assert data['result']['payload_type'] == 'remote_code_execution'
 
@@ -582,7 +582,7 @@ class TestLegacyEndpoints:
             json={'amount': 10000, 'split_count': 5}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert data['original_amount'] == 10000
         assert data['split_amount'] == 2000
@@ -600,7 +600,7 @@ class TestLegacyEndpoints:
             }
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['status'] == 'overridden'
         assert data['overridden_by'] == 'admin'
 
@@ -609,7 +609,7 @@ class TestLegacyEndpoints:
         response = client.get('/api/customers/payment-methods?customer_id=CUST-001')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'payment_methods' in data
         assert len(data['payment_methods']) > 0
 
@@ -617,7 +617,7 @@ class TestLegacyEndpoints:
         """Test customer export includes PII."""
         response = client.get('/api/customers/export?segment=all')
 
-        data = response.get_json()
+        data = response.json()
         assert 'customers' in data
         customer = data['customers'][0]
         assert 'ssn' in customer
@@ -635,7 +635,7 @@ class TestLogTampering:
             json={'systems': ['siem', 'firewall', 'ids']}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert data['logs_deleted'] is True
         assert data['recovery_possible'] is False
@@ -648,7 +648,7 @@ class TestLogTampering:
             json={'systems': ['all']}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['logs_deleted'] is True
 
 
@@ -660,7 +660,7 @@ class TestSystemFingerprinting:
         response = client.get('/api/system/version')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'application' in data
         assert 'version' in data
         assert 'build' in data
@@ -672,7 +672,7 @@ class TestSystemFingerprinting:
         """Test detailed version information exposure."""
         response = client.get('/api/system/version')
 
-        data = response.get_json()
+        data = response.json()
         assert 'database' in data
         assert 'server' in data
         # Version info useful for attackers
@@ -689,7 +689,7 @@ class TestUserCreation:
             json={'username': 'backdoor', 'role': 'admin'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert response.status_code == 200
         assert data['status'] == 'created'
         assert data['role'] == 'admin'
@@ -701,7 +701,7 @@ class TestUserCreation:
             json={'username': 'newadmin', 'role': 'admin'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['role'] == 'admin'
         assert 'password' in data
         assert 'warning' in data
@@ -713,7 +713,7 @@ class TestUserCreation:
             json={'username': 'testuser'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert 'password' in data
         assert data['password'].startswith('TempPass')
 
@@ -726,7 +726,7 @@ class TestTransactionExport:
         response = client.get('/api/transactions/export?from=2025-01-01&to=2025-12-31')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'transactions' in data
         assert len(data['transactions']) > 0
         assert 'total_amount' in data
@@ -735,7 +735,7 @@ class TestTransactionExport:
         """Test exporting all transaction data."""
         response = client.get('/api/transactions/export')
 
-        data = response.get_json()
+        data = response.json()
         assert data['total_count'] == 100
         assert 'total_amount' in data
 
@@ -743,7 +743,7 @@ class TestTransactionExport:
         """Test transaction export in different formats."""
         for fmt in ['json', 'csv', 'xml']:
             response = client.get(f'/api/transactions/export?format={fmt}')
-            data = response.get_json()
+            data = response.json()
             assert data['format'] == fmt
 
 
@@ -784,7 +784,7 @@ class TestAuthorizationBypass:
             json={'role': 'admin'}
         )
         assert response.status_code == 200
-        assert response.get_json()['new_role'] == 'admin'
+        assert response.json()['new_role'] == 'admin'
 
         # 4. Create backdoor admin user
         response = client.post(
@@ -804,14 +804,14 @@ class TestCriticalVulnerabilities:
             json={'command': 'cat /etc/passwd'}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert 'executed' in data['status'].lower()
 
     def test_critical_config_secrets_exposed(self, client):
         """Critical: All system secrets exposed."""
         response = client.get('/api/v1/admin/config')
 
-        data = response.get_json()
+        data = response.json()
         # AWS credentials exposed
         assert 'AKIA' in data['api_keys']['aws']['access_key_id']
         # Database password exposed
@@ -824,7 +824,7 @@ class TestCriticalVulnerabilities:
             json={'role': 'admin'}
         )
 
-        assert response.get_json()['new_role'] == 'admin'
+        assert response.json()['new_role'] == 'admin'
 
     def test_critical_audit_log_deletion(self, client):
         """Critical: Audit logs can be deleted."""
@@ -833,14 +833,14 @@ class TestCriticalVulnerabilities:
             json={'systems': ['all']}
         )
 
-        data = response.get_json()
+        data = response.json()
         assert data['recovery_possible'] is False
 
     def test_critical_user_export_with_passwords(self, client):
         """Critical: User passwords exported in plaintext."""
         response = client.get('/api/v1/admin/users/export?include_passwords=true')
 
-        data = response.get_json()
+        data = response.json()
         assert any('password_plaintext' in user for user in data['users'])
 
 
@@ -886,7 +886,7 @@ class TestComplianceViolations:
         """Test PII exposure violates data protection regulations."""
         response = client.get('/api/v1/admin/users/export')
 
-        data = response.get_json()
+        data = response.json()
         # SSN exposure violates regulations
         assert any('ssn' in user for user in data['users'])
 
@@ -894,7 +894,7 @@ class TestComplianceViolations:
         """Test password exposure violates security standards."""
         response = client.get('/api/v1/admin/users/export?include_passwords=true')
 
-        data = response.get_json()
+        data = response.json()
         # Plaintext passwords violate security standards
         assert data['includes_passwords'] is True
 
@@ -905,6 +905,6 @@ class TestComplianceViolations:
             json={'systems': ['audit', 'compliance']}
         )
 
-        data = response.get_json()
+        data = response.json()
         # Audit log deletion violates SOX, PCI-DSS, HIPAA
         assert data['logs_deleted'] is True

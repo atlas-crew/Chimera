@@ -1,10 +1,9 @@
-"""Focused tests for the hotpatch decorator during the Flask -> Starlette cutover."""
+"""Focused tests for the hotpatch decorator on Starlette routes."""
 
 import asyncio
 import json
 
 import pytest
-from flask import Flask, jsonify
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -86,7 +85,7 @@ def test_hotpatch_education_metadata_still_works_for_flask_routes(client):
     )
 
     assert response.status_code == 200
-    data = response.get_json()
+    data = response.json()
     assert data["_chimera"]["vuln_id"] == "CHM-BANK-002"
     assert data["_chimera"]["patched"] is False
 
@@ -143,26 +142,8 @@ def test_hotpatch_leaves_non_json_starlette_responses_untouched():
     assert body == "not-a-dict"
 
 
-def test_hotpatch_async_flask_views_still_get_decorated():
-    security_config.update({"bola_protection": False})
-    app = Flask(__name__)
-    app.secret_key = "test-secret"
-
-    @hotpatch("bola")
-    async def handler(is_secure: bool = False):
-        assert is_secure is False
-        return jsonify({"ok": True})
-
-    with app.test_request_context("/api/v1/banking/accounts", headers={"X-Chimera-Education": "true"}):
-        response = asyncio.run(handler())
-
-    assert response.headers["X-Chimera-Vuln-ID"] == "CHM-BANK-002"
-    assert response.get_json()["_chimera"]["vuln_id"] == "CHM-BANK-002"
-
-
-# Removed: test_hotpatch_flask_routes_still_work_when_starlette_symbols_missing
-# Banking is now an async Starlette route (task-16.3); its handler constructs a
-# JSONResponse directly, so the "Starlette uninstalled" defensive scenario the
-# test simulated no longer reflects any production code path. The other
-# hotpatch tests still cover sync vs async dispatch and the Flask compat-shim
-# header injection.
+# Removed in task-16.8: test_hotpatch_async_flask_views_still_get_decorated and
+# test_hotpatch_flask_routes_still_work_when_starlette_symbols_missing covered
+# the Flask compat path which no longer exists after the uvicorn cutover. The
+# remaining tests above still exercise sync/async Starlette dispatch and
+# header injection through the migrated banking router.

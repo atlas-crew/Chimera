@@ -317,11 +317,11 @@ class TestLogException:
     @patch('app.utils.monitoring.logger')
     def test_log_exception_http_exception(self, mock_logger):
         """Test logging HTTP exceptions."""
-        from werkzeug.exceptions import NotFound
+        from starlette.exceptions import HTTPException
 
         try:
-            raise NotFound('Resource not found')
-        except NotFound as e:
+            raise HTTPException(status_code=404, detail='Resource not found')
+        except HTTPException as e:
             log_exception(e)
 
         # HTTP exceptions should be logged as warning

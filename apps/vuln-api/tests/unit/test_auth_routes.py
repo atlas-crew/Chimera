@@ -39,7 +39,7 @@ class TestAuthLogin:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         assert 'token' in data
         assert 'user' in data
@@ -53,7 +53,7 @@ class TestAuthLogin:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
 
     def test_login_invalid_username(self, client):
@@ -64,7 +64,7 @@ class TestAuthLogin:
         })
 
         assert response.status_code == 401
-        data = response.get_json()
+        data = response.json()
         assert 'error' in data
         assert 'Invalid credentials' in data['error']
 
@@ -76,7 +76,7 @@ class TestAuthLogin:
         })
 
         assert response.status_code == 401
-        data = response.get_json()
+        data = response.json()
         assert 'error' in data
 
     def test_login_missing_credentials(self, client):
@@ -84,7 +84,7 @@ class TestAuthLogin:
         response = client.post('/api/v1/auth/login', json={})
 
         assert response.status_code == 400
-        data = response.get_json()
+        data = response.json()
         assert 'error' in data
 
     def test_login_mfa_required(self, client, mfa_user):
@@ -95,7 +95,7 @@ class TestAuthLogin:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data.get('mfa_required') is True
         assert 'challenge_id' in data
         assert data['method'] == 'totp'
@@ -109,7 +109,7 @@ class TestAuthLogin:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         assert 'vulnerability' in data
         assert 'SQL Injection' in data['vulnerability']
@@ -145,7 +145,7 @@ class TestAuthLogout:
         response = client.post('/api/v1/auth/logout')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
 
     def test_logout_unauthenticated_user(self, client):
@@ -169,7 +169,7 @@ class TestAuthRegister:
         })
 
         assert response.status_code == 201
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         assert data['username'] == 'newuser'
         assert 'user_id' in data
@@ -183,7 +183,7 @@ class TestAuthRegister:
         })
 
         assert response.status_code == 409
-        data = response.get_json()
+        data = response.json()
         assert 'error' in data
         # In full mode, reveals specific field
         assert 'Username already exists' in data['error']
@@ -197,7 +197,7 @@ class TestAuthRegister:
         })
 
         assert response.status_code == 409
-        data = response.get_json()
+        data = response.json()
         assert 'error' in data
         # In full mode, reveals specific field
         assert 'Email already registered' in data['error']
@@ -220,7 +220,7 @@ class TestAuthRegister:
         })
 
         assert response.status_code == 400
-        data = response.get_json()
+        data = response.json()
         assert 'error' in data
 
 
@@ -234,7 +234,7 @@ class TestPasswordReset:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         # In full mode, token is leaked
         assert 'reset_token' in data
@@ -247,7 +247,7 @@ class TestPasswordReset:
 
         # In full mode, reveals user doesn't exist
         assert response.status_code == 404
-        data = response.get_json()
+        data = response.json()
         assert 'Email not found' in data['error']
 
     def test_forgot_password_timing_attack(self, client, sample_user, demo_mode_full):
@@ -281,7 +281,7 @@ class TestPasswordReset:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
 
         # Verify password was changed (hash algorithm depends on DEMO_MODE)
@@ -300,7 +300,7 @@ class TestPasswordReset:
         })
 
         assert response.status_code == 400
-        data = response.get_json()
+        data = response.json()
         assert 'Invalid reset token' in data['error']
 
     def test_reset_password_used_token(self, client, sample_user, valid_reset_token):
@@ -318,7 +318,7 @@ class TestPasswordReset:
         })
 
         assert response.status_code == 400
-        data = response.get_json()
+        data = response.json()
         assert 'already used' in data['error']
 
 
@@ -332,7 +332,7 @@ class TestTokenRefresh:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         assert 'access_token' in data
         assert data['token_type'] == 'Bearer'
@@ -345,7 +345,7 @@ class TestTokenRefresh:
         })
 
         assert response.status_code == 401
-        data = response.get_json()
+        data = response.json()
         assert 'Invalid refresh token' in data['error']
 
     def test_refresh_missing_token(self, client):
@@ -353,7 +353,7 @@ class TestTokenRefresh:
         response = client.post('/api/v1/auth/refresh', json={})
 
         assert response.status_code == 400
-        data = response.get_json()
+        data = response.json()
         assert 'Refresh token required' in data['error']
 
 
@@ -365,7 +365,7 @@ class TestAuthStatus:
         response = client.get('/api/v1/auth/status')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['authenticated'] is True
         assert 'user' in data
 
@@ -374,7 +374,7 @@ class TestAuthStatus:
         response = client.get('/api/v1/auth/status')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['authenticated'] is False
 
 
@@ -392,7 +392,7 @@ class TestMFA:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         assert data['method'] == 'totp'
         assert 'secret' in data
@@ -405,7 +405,7 @@ class TestMFA:
         })
 
         assert response.status_code == 401
-        data = response.get_json()
+        data = response.json()
         assert 'Authentication required' in data['error']
 
     def test_mfa_enable_weak_secret_full_mode(self, client, authenticated_session, demo_mode_full):
@@ -415,7 +415,7 @@ class TestMFA:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         # In full mode, secret is MD5-based (weak)
         assert len(data['secret']) == 16
 
@@ -427,7 +427,7 @@ class TestMFA:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         assert 'token' in data
         assert 'user' in data
@@ -440,7 +440,7 @@ class TestMFA:
         })
 
         assert response.status_code == 401
-        data = response.get_json()
+        data = response.json()
         assert 'Invalid MFA code' in data['error']
 
     def test_mfa_verify_invalid_challenge(self, client):
@@ -451,7 +451,7 @@ class TestMFA:
         })
 
         assert response.status_code == 400
-        data = response.get_json()
+        data = response.json()
         assert 'Invalid challenge' in data['error']
 
     def test_mfa_backup_codes(self, client, authenticated_session):
@@ -459,7 +459,7 @@ class TestMFA:
         response = client.post('/api/v1/auth/mfa/backup')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         assert 'backup_codes' in data
         assert len(data['backup_codes']) == 10
@@ -469,7 +469,7 @@ class TestMFA:
         response = client.post('/api/v1/auth/mfa/backup')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         codes = data['backup_codes']
 
         # In full mode, codes are MD5-based (predictable)
@@ -486,7 +486,7 @@ class TestOAuth:
 
     def test_oauth_authorize(self, client):
         """Test OAuth authorization endpoint."""
-        response = client.get('/api/v1/auth/oauth/authorize', query_string={
+        response = client.get('/api/v1/auth/oauth/authorize', params={
             'client_id': 'test-client',
             'redirect_uri': 'http://localhost:3000/callback',
             'response_type': 'code',
@@ -494,7 +494,7 @@ class TestOAuth:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'authorization_code' in data
         assert data['redirect_uri'] == 'http://localhost:3000/callback'
         assert data['state'] == 'random-state'
@@ -503,7 +503,7 @@ class TestOAuth:
         """Test open redirect vulnerability in full mode."""
         malicious_redirect = 'http://attacker.com/steal'
 
-        response = client.get('/api/v1/auth/oauth/authorize', query_string={
+        response = client.get('/api/v1/auth/oauth/authorize', params={
             'client_id': 'test-client',
             'redirect_uri': malicious_redirect,
             'response_type': 'code'
@@ -511,20 +511,21 @@ class TestOAuth:
 
         # In full mode, accepts any redirect URI
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['redirect_uri'] == malicious_redirect
 
-    def test_oauth_callback(self, client):
+    def test_oauth_callback(self, client, set_session):
         """Test OAuth callback endpoint."""
         # First get authorization code
-        with client.session_transaction() as sess:
-            sess['oauth_auth'] = {
-                'client_id': 'test-client',
-                'redirect_uri': 'http://localhost:3000/callback',
-                'code': 'test-code',
-                'scope': 'read',
-                'state': 'test-state'
+        set_session(client, {
+            "oauth_auth": {
+                "client_id": "test-client",
+                "redirect_uri": "http://localhost:3000/callback",
+                "code": "test-code",
+                "scope": "read",
+                "state": "test-state",
             }
+        })
 
         response = client.post('/api/v1/auth/oauth/callback', json={
             'code': 'test-code',
@@ -532,18 +533,19 @@ class TestOAuth:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'access_token' in data
         assert data['token_type'] == 'Bearer'
 
-    def test_oauth_callback_no_state_validation_full_mode(self, client, demo_mode_full):
+    def test_oauth_callback_no_state_validation_full_mode(self, client, demo_mode_full, set_session):
         """Test missing state validation in full mode (CSRF vulnerability)."""
-        with client.session_transaction() as sess:
-            sess['oauth_auth'] = {
-                'client_id': 'test-client',
-                'code': 'test-code',
-                'state': 'expected-state'
+        set_session(client, {
+            "oauth_auth": {
+                "client_id": "test-client",
+                "code": "test-code",
+                "state": "expected-state",
             }
+        })
 
         # Send wrong state
         response = client.post('/api/v1/auth/oauth/callback', json={
@@ -561,7 +563,7 @@ class TestOAuth:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         assert 'token' in data
         assert 'google' in data['user']['username']
@@ -588,7 +590,7 @@ class TestSAML:
         response = client.get('/api/v1/auth/saml/metadata')
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'entity_id' in data
         assert 'certificate' in data
         # VULNERABILITY: Private key exposed
@@ -601,7 +603,7 @@ class TestSAML:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'saml_request_id' in data
         assert 'idp_url' in data
 
@@ -618,7 +620,7 @@ class TestSAML:
 
         # In full mode, accepts unsigned SAML responses
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         assert 'token' in data
 
@@ -645,7 +647,7 @@ class TestAPIKeys:
         # May fail with 500 if session handling is complex, so check for either success or error
         assert response.status_code in [200, 401, 500]
         if response.status_code == 200:
-            data = response.get_json()
+            data = response.json()
             assert 'api_keys' in data
 
     def test_create_api_key(self, client, authenticated_session):
@@ -656,7 +658,7 @@ class TestAPIKeys:
         })
 
         assert response.status_code == 201
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         assert 'api_key' in data
         assert 'key_id' in data
@@ -669,7 +671,7 @@ class TestAPIKeys:
         })
 
         assert response.status_code == 201
-        data = response.get_json()
+        data = response.json()
         # In full mode, uses MD5 (weak)
         assert data['api_key'].startswith('demo_')
 
@@ -679,7 +681,7 @@ class TestAPIKeys:
         create_response = client.post('/api/v1/auth/apikeys/create', json={
             'name': 'Temp Key'
         })
-        key_id = create_response.get_json()['key_id']
+        key_id = create_response.json()['key_id']
 
         # Revoke key
         response = client.post('/api/v1/auth/apikeys/revoke', json={
@@ -687,7 +689,7 @@ class TestAPIKeys:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
 
     def test_revoke_api_key_unauthorized(self, client, authenticated_session):
@@ -716,7 +718,7 @@ class TestJWTVulnerabilities:
 
         # In full mode, should accept 'none' algorithm
         if response.status_code == 200:
-            data = response.get_json()
+            data = response.json()
             token = data.get('token')
             # Token should be unsigned (no signature)
             assert '.' not in token or token.count('.') < 2
@@ -730,7 +732,7 @@ class TestJWTVulnerabilities:
         })
 
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert 'token' in data
         # Token uses weak secret from config
 
@@ -750,7 +752,7 @@ class TestDeviceRegistration:
         })
 
         assert response.status_code == 201
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
         assert 'device_id' in data
 
@@ -780,7 +782,7 @@ class TestVerification:
 
         # In full mode, any 6-digit code works
         assert response.status_code == 200
-        data = response.get_json()
+        data = response.json()
         assert data['success'] is True
 
     def test_verify_invalid_code(self, client, sample_user):
@@ -852,12 +854,13 @@ class TestAuthFlow:
         })
         assert login_response.status_code == 200
 
-    def test_mfa_enrollment_and_login_flow(self, client, sample_user):
+    def test_mfa_enrollment_and_login_flow(self, client, sample_user, set_session):
         """Test MFA enrollment and authentication flow."""
         # Login
-        with client.session_transaction() as sess:
-            sess['user_id'] = sample_user['user_id']
-            sess['username'] = sample_user['username']
+        set_session(client, {
+            "user_id": sample_user["user_id"],
+            "username": sample_user["username"],
+        })
 
         # Enable MFA
         mfa_response = client.post('/api/v1/auth/mfa/enable', json={
@@ -874,7 +877,7 @@ class TestAuthFlow:
             'password': sample_user['password']
         })
         assert login_response.status_code == 200
-        data = login_response.get_json()
+        data = login_response.json()
         assert data.get('mfa_required') is True
 
 

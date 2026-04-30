@@ -9,7 +9,7 @@ def test_claim_submit(client):
         json={'policy_number': 'POL-123', 'claim_type': 'auto', 'claim_amount': 2500}
     )
     assert response.status_code == 201
-    data = response.get_json()
+    data = response.json()
     assert data['claim']['policy_number'] == 'POL-123'
 
 
@@ -24,7 +24,7 @@ def test_claims_history(client):
 
     response = client.get('/api/claims/history?policy_number=POL-999')
     assert response.status_code == 200
-    data = response.get_json()
+    data = response.json()
     assert data['count'] == 1
 
 
@@ -41,7 +41,7 @@ def test_policy_limits_update(client):
         json={'coverage_limit': 250000}
     )
     assert response.status_code == 200
-    data = response.get_json()
+    data = response.json()
     assert data['new_limit'] == 250000
 
 
@@ -51,7 +51,7 @@ def test_policy_endorsement_tamper(client):
         json={'type': 'coverage_change', 'override_checks': True}
     )
     assert response.status_code == 201
-    data = response.get_json()
+    data = response.json()
     assert data['endorsement']['override_checks'] is True
 
 
@@ -61,7 +61,7 @@ def test_policy_cancel_override(client):
         json={'bypass_validation': True}
     )
     assert response.status_code == 200
-    data = response.get_json()
+    data = response.json()
     assert data['policy']['status'] == 'cancelled'
 
 
@@ -71,5 +71,5 @@ def test_claim_settlement_override(client):
         json={'claim_id': 'claim-1', 'amount': 500000, 'override_limits': True}
     )
     assert response.status_code == 201
-    data = response.get_json()
+    data = response.json()
     assert data['settlement']['override_limits'] is True

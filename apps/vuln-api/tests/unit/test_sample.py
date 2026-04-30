@@ -30,7 +30,7 @@ class TestSampleEndpoints:
         #                           json=payload,
         #                           headers={'Content-Type': 'application/json'})
         #     assert response.status_code == 200
-        #     data = response.get_json()
+        #     data = response.json()
         #     assert 'token' in data
 
         # Placeholder assertion

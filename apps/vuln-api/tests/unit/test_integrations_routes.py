@@ -49,28 +49,41 @@ class StubService:
 
 
 @pytest.fixture
-def apparatus_app(app):
-    """Configure Apparatus integration settings on the shared Flask app fixture."""
-    app.config.update({
-        'APPARATUS_ENABLED': True,
-        'APPARATUS_BASE_URL': 'http://apparatus.local',
-        'APPARATUS_TIMEOUT_MS': 5000,
-    })
+def apparatus_app(app, monkeypatch):
+    """Configure Apparatus integration settings on the ASGI factory.
+
+    The Apparatus service reads from ``app_config`` (the framework-agnostic
+    singleton) post task-16.8; tests override the relevant attributes
+    directly via monkeypatch so the changes don't leak between tests.
+    """
+    from app.config import app_config
+
+    monkeypatch.setattr(app_config, 'apparatus_enabled', True)
+    monkeypatch.setattr(app_config, 'apparatus_base_url', 'http://apparatus.local')
+    monkeypatch.setattr(app_config, 'apparatus_timeout_ms', 5000)
     return app
 
 
 @pytest.fixture
 def apparatus_client(apparatus_app):
-    return apparatus_app.test_client()
+    from starlette.testclient import TestClient
+
+    with TestClient(
+        apparatus_app,
+        client=("127.0.0.1", 50000),
+        raise_server_exceptions=False,
+    ) as client:
+        yield client
 
 
 def test_apparatus_status_returns_disabled_payload(apparatus_app, apparatus_client):
-    apparatus_app.config['APPARATUS_ENABLED'] = False
+    from app.config import app_config
+    app_config.apparatus_enabled = False
 
     response = apparatus_client.get('/api/v1/integrations/apparatus/status')
 
     assert response.status_code == 200
-    assert response.get_json() == {
+    assert response.json() == {
         'enabled': False,
         'configured': True,
         'reachable': False,
@@ -83,12 +96,13 @@ def test_apparatus_status_returns_disabled_payload(apparatus_app, apparatus_clie
 
 
 def test_apparatus_status_returns_config_error_payload(apparatus_app, apparatus_client):
-    apparatus_app.config['APPARATUS_BASE_URL'] = ''
+    from app.config import app_config
+    app_config.apparatus_base_url = ''
 
     response = apparatus_client.get('/api/v1/integrations/apparatus/status')
 
     assert response.status_code == 200
-    assert response.get_json() == {
+    assert response.json() == {
         'enabled': True,
         'configured': False,
         'reachable': False,
@@ -117,7 +131,7 @@ def test_apparatus_status_returns_success_payload(apparatus_client, monkeypatch)
     response = apparatus_client.get('/api/v1/integrations/apparatus/status')
 
     assert response.status_code == 200
-    assert response.get_json()['health'] == {'status': 'ok'}
+    assert response.json()['health'] == {'status': 'ok'}
     assert service.calls == [('status', None)]
 
 
@@ -130,7 +144,7 @@ def test_apparatus_status_returns_unreachable_payload(apparatus_client, monkeypa
     response = apparatus_client.get('/api/v1/integrations/apparatus/status')
 
     assert response.status_code == 200
-    payload = response.get_json()
+    payload = response.json()
     assert payload['reachable'] is False
     assert payload['error'] == 'apparatus_network_error'
     assert payload['message'] == 'network down'
@@ -149,7 +163,7 @@ def test_apparatus_history_returns_bounded_response(apparatus_client, monkeypatc
     response = apparatus_client.get('/api/v1/integrations/apparatus/history?limit=2')
 
     assert response.status_code == 200
-    assert response.get_json() == {
+    assert response.json() == {
         'count': 2,
         'entries': [{'id': '1'}, {'id': '2'}],
     }
@@ -204,7 +218,7 @@ def test_apparatus_history_returns_structured_disabled_error(apparatus_client, m
     response = apparatus_client.get('/api/v1/integrations/apparatus/history')
 
     assert response.status_code == 503
-    assert response.get_json() == {
+    assert response.json() == {
         'error': 'apparatus_disabled',
         'message': 'disabled now',
     }
@@ -219,7 +233,7 @@ def test_apparatus_history_returns_structured_config_error(apparatus_client, mon
     response = apparatus_client.get('/api/v1/integrations/apparatus/history')
 
     assert response.status_code == 500
-    assert response.get_json() == {
+    assert response.json() == {
         'error': 'apparatus_config_error',
         'message': 'config missing',
     }
@@ -234,7 +248,7 @@ def test_apparatus_history_returns_structured_upstream_error(apparatus_client, m
     response = apparatus_client.get('/api/v1/integrations/apparatus/history')
 
     assert response.status_code == 502
-    assert response.get_json() == {
+    assert response.json() == {
         'error': 'apparatus_upstream_error',
         'message': 'bad upstream',
         'status_code': 503,
@@ -255,7 +269,7 @@ def test_apparatus_ghosts_start_proxies_payload(apparatus_client, monkeypatch):
     })
 
     assert response.status_code == 200
-    assert response.get_json() == {'running': True, 'rps': 8}
+    assert response.json() == {'running': True, 'rps': 8}
     assert service.calls == [('start', {'rps': 8, 'duration': 30000})]
 
 
@@ -269,7 +283,7 @@ def test_apparatus_ghosts_start_rejects_non_object_payload(apparatus_client, mon
     response = apparatus_client.post('/api/v1/integrations/apparatus/ghosts/start', json=['unexpected'])
 
     assert response.status_code == 400
-    assert response.get_json() == {
+    assert response.json() == {
         'error': 'apparatus_validation_error',
         'message': 'Ghost start payload must be a JSON object.',
     }
@@ -286,7 +300,7 @@ def test_apparatus_ghosts_start_rejects_unknown_fields(apparatus_client, monkeyp
     response = apparatus_client.post('/api/v1/integrations/apparatus/ghosts/start', json={'rps': 8, 'mode': 'burst'})
 
     assert response.status_code == 400
-    assert response.get_json() == {
+    assert response.json() == {
         'error': 'apparatus_validation_error',
         'message': 'Unsupported ghost start fields: mode.',
     }
@@ -303,7 +317,7 @@ def test_apparatus_ghosts_stop_proxies_response(apparatus_client, monkeypatch):
     response = apparatus_client.post('/api/v1/integrations/apparatus/ghosts/stop')
 
     assert response.status_code == 200
-    assert response.get_json() == {'running': False}
+    assert response.json() == {'running': False}
     assert service.calls == [('stop', None)]
 
 
@@ -318,7 +332,7 @@ def test_apparatus_ghost_routes_return_network_error(apparatus_client, monkeypat
 
     assert start_response.status_code == 502
     assert stop_response.status_code == 502
-    assert start_response.get_json() == {
+    assert start_response.json() == {
         'error': 'apparatus_network_error',
         'message': 'timed out',
     }

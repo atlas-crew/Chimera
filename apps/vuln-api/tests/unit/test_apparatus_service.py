@@ -6,8 +6,6 @@ from dataclasses import dataclass
 
 import pytest
 import requests
-from flask import Flask
-
 from app.services import (
     ApparatusService,
     ApparatusServiceConfigError,
@@ -56,13 +54,11 @@ class FakeSession:
 
 
 def test_build_apparatus_settings_uses_defaults():
-    app = Flask(__name__)
-    app.config['APPARATUS_ENABLED'] = False
-    app.config['APPARATUS_BASE_URL'] = 'http://127.0.0.1:8090/'
-    app.config['APPARATUS_TIMEOUT_MS'] = '2500'
-
-    with app.app_context():
-        settings = build_apparatus_settings()
+    settings = build_apparatus_settings({
+        'APPARATUS_ENABLED': False,
+        'APPARATUS_BASE_URL': 'http://127.0.0.1:8090/',
+        'APPARATUS_TIMEOUT_MS': '2500',
+    })
 
     assert settings.enabled is False
     assert settings.base_url == 'http://127.0.0.1:8090'

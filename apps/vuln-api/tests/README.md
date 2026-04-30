@@ -231,7 +231,7 @@ markers =
 
 ### conftest.py
 Provides shared fixtures:
-- `client` - Flask test client
+- `client` - Starlette `TestClient` (raise_server_exceptions=False)
 - `auth_headers` - Authentication headers
 - `sample_data` - Test data fixtures
 - `mock_services` - Service mocks

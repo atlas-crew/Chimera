@@ -14,8 +14,7 @@ from starlette.testclient import TestClient
 app_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(app_dir))
 
-from app import create_app
-from app.asgi import create_app as create_asgi_app
+from app.asgi import create_app
 from app.models import (
     users_db, add_user, username_to_id_map, email_to_id_map,
     medical_records_db, claims_db,
@@ -57,41 +56,59 @@ except ImportError:
 
 @pytest.fixture
 def app():
-    """Create Flask application for testing."""
-    # DEBUG=True exercises the dev-mode localhost bypass (used by the education
-    # parity tests that assert localhost requests skip the auth gate).
-    app = create_app({"DEBUG": True, "TESTING": True})
-    app.config.update({
-        "TESTING": True,
-    })
-    yield app
+    """Create the Starlette application for tests.
+
+    DEBUG=True exercises the dev-mode localhost bypass that the education
+    parity tests rely on (localhost requests skip the auth gate).
+    """
+    yield create_app({"DEBUG": True, "TESTING": True})
 
 
 @pytest.fixture
 def client(app):
-    """Create test client."""
-    return app.test_client()
+    """Starlette TestClient bound to a localhost client address.
+
+    ``raise_server_exceptions=False`` mirrors Flask's old test_client default
+    so the few permissive tests that accept ``status_code in [200, 401, 500]``
+    keep returning a Response instead of re-raising.
+    """
+    with TestClient(
+        app,
+        client=("127.0.0.1", 50000),
+        raise_server_exceptions=False,
+    ) as test_client:
+        yield test_client
 
 
 @pytest.fixture
-def asgi_app():
-    """Create Starlette application for migrated route testing."""
-    app = create_asgi_app({"DEBUG": True, "TESTING": True})
-    yield app
+def remote_client(app):
+    """TestClient with a non-local address for auth-gate coverage."""
+    with TestClient(
+        app,
+        client=("198.51.100.10", 50000),
+        raise_server_exceptions=False,
+    ) as test_client:
+        yield test_client
+
+
+# --- Backward-compatible aliases --------------------------------------------
+# Several tests still depend on ``asgi_client`` and ``asgi_remote_client``
+# from the migration era. They resolve to the same TestClients above.
 
 
 @pytest.fixture
-def asgi_client(asgi_app):
-    """Create ASGI test client that mirrors localhost mixed-mode behavior."""
-    with TestClient(asgi_app, client=("127.0.0.1", 50000)) as client:
-        yield client
+def asgi_app(app):
+    return app
 
 
 @pytest.fixture
-def asgi_remote_client(asgi_app):
-    """Create ASGI test client with a non-local address for auth gate coverage."""
-    with TestClient(asgi_app, client=("198.51.100.10", 50000)) as client:
-        yield client
+def asgi_client(client):
+    return client
+
+
+@pytest.fixture
+def asgi_remote_client(remote_client):
+    return remote_client
 
 
 @pytest.fixture
@@ -108,9 +125,30 @@ def set_asgi_session():
 
 
 @pytest.fixture
-def runner(app):
-    """Create CLI runner."""
-    return app.test_cli_runner()
+def set_session(set_asgi_session):
+    """Preferred name; replaces Flask's ``client.session_transaction()`` usage."""
+    return set_asgi_session
+
+
+@pytest.fixture
+def read_session():
+    """Decode the SessionMiddleware cookie that the server set on ``client``.
+
+    Replaces the read-side of Flask's ``client.session_transaction()`` for
+    tests that assert what the server wrote into the session.
+    """
+    from base64 import b64decode
+
+    signer = TimestampSigner("chimera-demo-key-not-for-production")
+
+    def _read(client):
+        cookie = client.cookies.get("session")
+        if cookie is None:
+            return {}
+        unsigned = signer.unsign(cookie.encode("utf-8"))
+        return json.loads(b64decode(unsigned).decode("utf-8"))
+
+    return _read
 
 
 @pytest.fixture(autouse=True)
@@ -636,13 +674,19 @@ def mfa_user():
 
 
 @pytest.fixture
-def authenticated_session(client, sample_user):
-    """Create an authenticated session."""
+def authenticated_session(client, sample_user, set_session):
+    """Seed an authenticated session cookie on ``client`` and return the user.
+
+    Replaces the previous Flask ``client.session_transaction()`` block; the
+    Starlette equivalent signs the cookie with the same secret the
+    ``SessionMiddleware`` is configured with.
+    """
     import uuid
-    with client.session_transaction() as sess:
-        sess['user_id'] = sample_user['user_id']
-        sess['username'] = sample_user['username']
-        sess['session_id'] = str(uuid.uuid4())
+    set_session(client, {
+        "user_id": sample_user["user_id"],
+        "username": sample_user["username"],
+        "session_id": str(uuid.uuid4()),
+    })
     return sample_user
 
 
