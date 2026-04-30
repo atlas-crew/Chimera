@@ -1,6 +1,6 @@
 # Chimera - Comprehensive Documentation
 
-> **Complete guide for the Flask API honeypot application with intentional vulnerabilities for WAF testing**
+> **Complete guide for the Starlette/uvicorn API honeypot application with intentional vulnerabilities for WAF testing**
 
 ## Table of Contents
 - [Overview](#overview)
@@ -14,40 +14,49 @@
 
 ## Overview
 
-The Chimera is a Python Flask application serving as a honeypot with 469 vulnerable endpoints designed to test and demonstrate  WAF capabilities. It simulates real-world applications with intentional security flaws for testing purposes.
+Chimera is a Python Starlette ASGI application serving as a honeypot with 469 vulnerable endpoints designed to test and demonstrate WAF capabilities. It simulates real-world applications with intentional security flaws for testing purposes.
 
 ### Key Features
-- **469 Vulnerable Endpoints** across 28 blueprints and domains (verified via `just docs-drift`)
+- **469 Vulnerable Endpoints** across 28 router packages (verified via `just docs-check`)
 - **Intentional Security Flaws** for WAF testing
 - **Thread-Safe Data Layer** with validation bypass
 - **Comprehensive Test Suite** with unit and security-focused coverage
 - **Multiple API Patterns** (REST, GraphQL-like, SOAP-like)
 - **Realistic Data Models** for various industries
 
-> **Note on OpenAPI/Swagger**: The static OpenAPI specification (`docs/openapi.yaml`) is generated from the blueprint routes and aims to list the full endpoint surface. Schemas are intentionally minimal and some routes are conditional (e.g., database-vulnerable endpoints require `USE_DATABASE=true`). For deeper details, refer to the Blueprint Organization table below or inspect the `app/blueprints` source.
+> **Note on OpenAPI/Swagger**: The static OpenAPI specification (`docs/openapi.yaml`) is hand-maintained against the live router table and aims to list the full endpoint surface. Schemas are intentionally minimal and some routes are conditional (e.g., database-vulnerable endpoints require `USE_DATABASE=true`). For deeper details, refer to the Router Organization table below or inspect the `app/blueprints` source. Drift is checked by `scripts/check_openapi_drift.py`.
 
 ### Technology Stack
-- **Framework**: Flask 2.3.3
-- **Server**: Gunicorn with gevent workers
-- **Testing**: Pytest with coverage reporting
+- **Framework**: Starlette (ASGI) ≥0.37
+- **Server**: uvicorn (with `--workers N` in production)
+- **Testing**: Pytest with Starlette `TestClient`
 - **Authentication**: JWT (including vulnerable "none" algorithm)
-- **Data Storage**: In-memory thread-safe store
+- **Data Storage**: In-memory thread-safe store; SQLAlchemy 2.0 + SQLite when `USE_DATABASE=true`
 
 ## Architecture
 
 ### Directory Structure
 ```
-api-demo/
+apps/vuln-api/
 ├── app/
-│   ├── __init__.py                 # Flask app factory
+│   ├── asgi.py                     # Starlette ASGI factory + module-level `app`
+│   ├── __init__.py                 # Re-exports `create_app` and `app`
+│   ├── routing.py                  # DecoratorRouter + safe_json helpers
+│   ├── orm.py                      # SQLAlchemy 2.0 ORM (USE_DATABASE=true)
+│   ├── database.py                 # Engine + sessionmaker + seed_data
+│   ├── error_handlers_asgi.py      # Starlette exception handlers
+│   ├── middleware/
+│   │   └── traffic_recorder_asgi.py  # ASGI traffic recorder middleware
 │   ├── models/
-│   │   └── dal.py                  # Data Access Layer (~450 lines)
+│   │   ├── dal.py                  # Data Access Layer (~450 lines)
+│   │   └── data_stores.py          # 100+ named in-memory stores
 │   ├── utils/
-│   │   ├── validators.py           # Input validation (~200 lines)
-│   │   ├── responses.py            # Response formatting (~180 lines)
 │   │   ├── auth_helpers.py         # Auth utilities (~320 lines)
 │   │   ├── demo_data.py            # Data seeding (~250 lines)
-│   │   └── monitoring.py           # Logging/metrics (~150 lines)
+│   │   ├── hotpatch.py             # @hotpatch decorator (Starlette)
+│   │   ├── monitoring.py           # Logging/metrics (~150 lines)
+│   │   ├── security_config.py      # Per-vuln toggle state
+│   │   └── vuln_registry.py        # X-Chimera-* metadata
 │   └── blueprints/
 │       ├── auth/                   # Authentication & identity
 │       ├── banking/                # Financial operations
@@ -63,20 +72,21 @@ api-demo/
 │       └── ...                     # payments, integrations, etc.
 ├── tests/
 │   ├── unit/                       # Unit tests
-│   └── integration/                # Integration tests (optional)
+│   ├── integration/                # Integration tests (optional)
+│   └── conftest.py                 # Starlette TestClient + fixtures
 ├── docs/                           # Documentation
-├── static/                         # Static assets
-├── app.py                          # Main application
-├── gunicorn.conf.py               # Server configuration
-├── pyproject.toml                # Dependencies
-├── uv.lock                       # Locked dependency graph
-├── Dockerfile                     # Container definition
-└── justfile                       # Build automation
+├── static/                         # Static assets (mounted via StaticFiles)
+├── pyproject.toml                  # Dependencies (Starlette + uvicorn + SQLAlchemy)
+├── uv.lock                         # Locked dependency graph
+├── Dockerfile                      # Dev container (uvicorn --reload)
+├── Dockerfile.prod                 # Production container (uvicorn --workers 4)
+├── Dockerfile.fargate              # ECS/Fargate container
+└── justfile                        # Build automation
 ```
 
-### Blueprint Organization
+### Router Organization
 
-The application is organized into domain-specific blueprints:
+The application is organized into domain-specific router packages (filesystem name `app/blueprints/{domain}/` preserved from pre-migration; the underlying object is a `DecoratorRouter`):
 
 | Domain / Industry | Endpoints | Description |
 |-------------------|-----------|-------------|
@@ -117,16 +127,19 @@ Thread-safe in-memory data store with:
 
 ### Local Development
 ```bash
-# Navigate to api-demo
-cd api-demo
+# Navigate to vuln-api
+cd apps/vuln-api
 
 # Install dependencies
 uv sync --extra dev --frozen
 
-# Run locally
-uv run python app.py
+# Run locally (preferred — uses justfile)
+just run-vulnerable
 
-# Access at http://localhost:5000
+# Or invoke uvicorn directly:
+DEMO_MODE=full uv run uvicorn app.asgi:app --host 0.0.0.0 --port 8880 --reload
+
+# Access at http://localhost:8880
 ```
 
 ### Docker Deployment
@@ -135,7 +148,7 @@ uv run python app.py
 ./waf-demo --sites=demo start
 
 # Or standalone
-docker build -t demo-api ./api-demo
+docker build -t demo-api ./apps/vuln-api
 docker run -p 8080:80 demo-api
 ```
 
@@ -698,43 +711,51 @@ Coverage is enforced at 80% for unit tests. Run `just test-coverage` or `just te
 
 ### Adding New Endpoints
 
-1. **Create Blueprint** (if new domain):
+1. **Create the router package** (if new domain):
+```python
+# app/blueprints/newdomain/__init__.py
+from app.routing import DecoratorRouter as Router
+
+newdomain_router = Router(routes=[])
+
+from . import routes  # noqa: E402,F401
+```
+
 ```python
 # app/blueprints/newdomain/routes.py
-from flask import Blueprint, request, jsonify
-from app.utils.responses import success_response, error_response
-from app.utils.validators import validate_input
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
-newdomain_bp = Blueprint('newdomain', __name__)
+from app.routing import safe_json
+from . import newdomain_router
 
-@newdomain_bp.route('/api/v1/newdomain/endpoint', methods=['POST'])
-def new_endpoint():
-    # Validation (optional for vulnerable endpoints)
-    errors = validate_input(request.json, {
-        'field': {'required': True, 'type': 'string'}
-    })
-    if errors:
-        return error_response(errors, 400)
 
-    # Business logic
-    result = process_request(request.json)
+@newdomain_router.route('/api/v1/newdomain/endpoint', methods=['POST'])
+async def new_endpoint(request: Request):
+    data = await safe_json(request)
+    field = data.get('field')
 
-    return success_response(result)
+    # Vulnerability-by-design: no input validation in vulnerable endpoints.
+    result = process_request(data)
+
+    return JSONResponse({"success": True, "result": result})
 ```
 
-2. **Register Blueprint**:
+2. **Mount the router** in `app/asgi.py`:
 ```python
-# app/__init__.py
-from app.blueprints.newdomain.routes import newdomain_bp
-app.register_blueprint(newdomain_bp)
+from app.blueprints.newdomain import newdomain_router
+
+routes = [
+    # ... existing routers ...
+    *newdomain_router.routes,
+]
 ```
 
-3. **Add Tests**:
+3. **Add tests**:
 ```python
 # tests/unit/test_newdomain_routes.py
 def test_new_endpoint(client):
-    response = client.post('/api/v1/newdomain/endpoint',
-                          json={'field': 'value'})
+    response = client.post('/api/v1/newdomain/endpoint', json={'field': 'value'})
     assert response.status_code == 200
 ```
 
@@ -744,45 +765,41 @@ To add intentional vulnerabilities:
 
 ```python
 # Skip validation for vulnerable endpoints
-from app.models.dal import DataAccessLayer
+from app.models.dal import DataStore
 
 # Vulnerable: No validation
-dal = DataAccessLayer()
-result = dal.find('users', {'username': request.args.get('user')},
-                  skip_validation=True)
+store = DataStore("users", bypass_validation=True)
+result = store.find(lambda r: r.get("username") == request.query_params.get("user"))
 
-# Vulnerable: SQL injection simulation
-query = f"SELECT * FROM users WHERE name = '{request.args.get('name')}'"
+# Vulnerable: SQL injection simulation (USE_DATABASE=true path)
+from app.database import get_session
+session = get_session()
+cursor = session.connection().connection.cursor()
+query = f"SELECT * FROM users WHERE name = '{request.query_params.get('name')}'"
+cursor.execute(query)
 
 # Vulnerable: Command injection
 import os
-os.system(f"echo {request.json.get('input')}")
+data = await safe_json(request)
+os.system(f"echo {data.get('input')}")
 
 # Vulnerable: XSS
-return f"<html><body>Hello {request.args.get('name')}</body></html>"
+from starlette.responses import HTMLResponse
+return HTMLResponse(f"<html><body>Hello {request.query_params.get('name')}</body></html>")
 ```
 
 ### Security Controls
 
-For testing different WAF behaviors:
+The codebase has no rate-limiter today (intentional — exposes brute-force surface). For per-vulnerability toggles use `app/utils/security_config.py`:
 
 ```python
-# app/utils/security.py
+from app.utils.security_config import security_config
 
-# Rate limiting
-from flask_limiter import Limiter
-limiter = Limiter(key_func=lambda: request.remote_addr)
+# Toggle a specific defensive layer at runtime
+security_config.update({"bola_protection": False})
 
-# Input sanitization (can be bypassed)
-def sanitize_input(data, bypass=False):
-    if bypass or request.headers.get('X-Bypass-Security'):
-        return data
-    # Sanitization logic
-    return clean_data
-
-# Audit logging
-def audit_log(action, user, details):
-    logger.info(f"AUDIT: {action} by {user}: {details}")
+# The @hotpatch decorator (app/utils/hotpatch.py) reads these flags and
+# branches between vulnerable and secure handler logic without restart.
 ```
 
 ## Configuration
@@ -790,53 +807,51 @@ def audit_log(action, user, details):
 ### Environment Variables
 
 ```bash
-# Flask configuration
-FLASK_ENV=development|production
-FLASK_DEBUG=0|1
-SECRET_KEY=your-secret-key
+# Demo behavior
+DEMO_MODE=full|strict             # full = all vulns active; strict = dangerous endpoints blocked
+USE_DATABASE=true|false           # enable SQLite-backed SQLi demos
+DATABASE_PATH=/tmp/api-demo.db    # SQLite file location when USE_DATABASE=true
+SECRET_KEY=chimera-demo-key-not-for-production   # SessionMiddleware signing key
 
-# Security settings
-ENABLE_VULNERABILITIES=true|false
-BYPASS_VALIDATION=true|false
+# Apparatus integration (optional)
+APPARATUS_ENABLED=true|false
+APPARATUS_BASE_URL=http://127.0.0.1:8090
+APPARATUS_TIMEOUT_MS=5000
+
+# Throughput-mode short-circuit (optional)
+DEMO_THROUGHPUT_MODE=true|false
+DEMO_THROUGHPUT_PAYLOAD_BYTES=2048
+DEMO_THROUGHPUT_MAX_BYTES=1048576
+DEMO_THROUGHPUT_PATHS=             # comma-separated path tokens to short-circuit
+DEMO_THROUGHPUT_EXCLUDE_PATHS=     # comma-separated path tokens to skip
+
+# Logging
 LOG_LEVEL=DEBUG|INFO|WARNING|ERROR
-
-# Database (future)
-DATABASE_URL=sqlite:///app.db
-REDIS_URL=redis://localhost:6379
-
-# Performance
-GUNICORN_WORKERS=4
-WORKER_CLASS=gevent
-WORKER_CONNECTIONS=1000
+SQL_DEBUG=true|false              # echo SQL statements when USE_DATABASE=true
 ```
 
-### Gunicorn Configuration
+### uvicorn Configuration
 
-```python
-# gunicorn.conf.py
-import os
+uvicorn is invoked from the Dockerfiles and the justfile — there is no Python config file. Tune via CLI flags:
 
-workers = int(os.getenv('GUNICORN_WORKERS', '4'))
-worker_class = 'gevent'  # CRITICAL: Use async workers for handling concurrent requests
-worker_connections = 1000  # Each worker can handle 1000 concurrent connections
-timeout = 120
-keepalive = 5
-max_requests = 1000
-max_requests_jitter = 50
+```bash
+# Production (matches Dockerfile.prod)
+uv run uvicorn app.asgi:app \
+  --host 0.0.0.0 \
+  --port 8880 \
+  --workers 4 \
+  --log-level info
+
+# Development (matches Dockerfile)
+uv run uvicorn app.asgi:app --host 0.0.0.0 --port 80 --reload
 ```
 
-**Important**: The application uses `gevent` workers for async handling. This provides:
-- 4,000 total concurrent connections (4 workers × 1000 connections)
-- Non-blocking I/O for better performance
-- Proper handling of traffic generation (100+ RPS)
-- Support for concurrent attack simulation
-
-Never change to `sync` workers as this would limit the application to only 4 concurrent requests total, causing immediate failure under load.
+`--workers N` spawns N independent worker processes (each loads `app.asgi:app` once). Starlette routes are async by default, so a single worker can handle many concurrent requests via the asyncio event loop without dedicated worker threads.
 
 ### Docker Configuration
 
 ```dockerfile
-# Dockerfile
+# Dockerfile (dev)
 FROM python:3.12-slim
 
 # Install uv
@@ -848,13 +863,14 @@ COPY pyproject.toml uv.lock /app/
 RUN uv sync --frozen --no-dev
 
 COPY app/ /app/app/
-COPY app.py /app/app.py
 COPY static /app/static
 
 EXPOSE 80
 ENV PORT=80
-CMD ["uv", "run", "python", "app.py"]
+CMD ["uv", "run", "uvicorn", "app.asgi:app", "--host", "0.0.0.0", "--port", "80", "--reload"]
 ```
+
+`Dockerfile.prod` is multi-stage and switches to `--workers 4 --log-level info`; `Dockerfile.fargate` runs on port 8080 for ECS/Fargate.
 
 ## Deployment
 
@@ -903,9 +919,9 @@ For demo environments:
 #### Port Already in Use
 ```bash
 # Find process
-lsof -i :5000
+lsof -i :8880
 # Kill process
-kill $(lsof -t -i:5000)
+kill $(lsof -t -i:8880)
 ```
 
 #### Import Errors
@@ -926,10 +942,8 @@ uv run pytest -vv tests/unit/test_auth_routes.py
 
 #### Memory Issues
 ```bash
-# Limit worker connections
-export WORKER_CONNECTIONS=100
-# Reduce workers
-export GUNICORN_WORKERS=2
+# Reduce worker count when invoking uvicorn
+uv run uvicorn app.asgi:app --workers 2 --port 8880
 ```
 
 ## Quick Reference
@@ -937,30 +951,35 @@ export GUNICORN_WORKERS=2
 ### Essential Commands
 ```bash
 # Start locally
-uv run python app.py
+just run-vulnerable
 
 # Run tests
 just test
 
 # Test specific vulnerability
-curl "http://localhost:8080/api/v1/auth/login" \
+curl "http://localhost:8880/api/v1/auth/login" \
   -d '{"username":"admin'\'' OR '\''1'\''='\''1","password":"x"}'
 
 # Check health
-curl http://localhost:8080/health
+curl http://localhost:8880/healthz
 
 # View logs
 docker logs demo-waf-site
 ```
 
 ### Key Files
-- `app.py` - Main application entry point
-- `app/models/dal.py` - Data access layer
+- `app/asgi.py` - Starlette ASGI factory + module-level `app`
+- `app/models/dal.py` - In-memory data access layer
+- `app/orm.py` - SQLAlchemy 2.0 ORM (USE_DATABASE=true)
+- `app/database.py` - Engine + sessionmaker + seed_data
 - `app/blueprints/*/routes.py` - Endpoint implementations
+- `app/routing.py` - DecoratorRouter + safe_json helpers
+- `app/utils/hotpatch.py` - @hotpatch decorator (vulnerable/secure switching)
 - `tests/unit/*.py` - Unit tests
-- `pyproject.toml` - Dependencies
+- `tests/conftest.py` - Starlette TestClient + shared fixtures
+- `pyproject.toml` - Dependencies (Starlette + uvicorn + SQLAlchemy)
 - `uv.lock` - Locked dependency graph
-- `gunicorn.conf.py` - Server configuration
+- `Dockerfile{,.prod,.fargate}` - Container definitions (uvicorn)
 
 ### Useful Endpoints for Testing
 ```bash

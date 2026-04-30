@@ -10,8 +10,9 @@ Chimera is a pnpm + Nx monorepo containing two applications that can run indepen
                     │                                     │
                     │  ┌──────────────┐ ┌──────────────┐  │
                     │  │   vuln-api   │ │   vuln-web   │  │
-                    │  │  Flask/Python│ │ React/Vite/TS│  │
-                    │  │  Port 5000   │ │  Port 5175   │  │
+                    │  │ Starlette/   │ │ React/Vite/TS│  │
+                    │  │  uvicorn     │ │              │  │
+                    │  │  Port 8880   │ │  Port 5175   │  │
                     │  └──────┬───────┘ └──────┬───────┘  │
                     │         │                │          │
                     │         │    Vite Proxy   │          │
@@ -27,29 +28,29 @@ Chimera is a pnpm + Nx monorepo containing two applications that can run indepen
 ```mermaid
 flowchart LR
     Browser -->|:5175| Vite[Vite Dev Server]
-    Vite -->|/api/*| Flask[Flask :5000]
+    Vite -->|/api/*| API[uvicorn :8880]
     Vite -->|other| SPA[React SPA]
-    Flask -->|JSON| Browser
+    API -->|JSON| Browser
 ```
 
-In development, the Vite dev server on port 5175 proxies `/api/*` requests to Flask on port 5000. All other routes serve the React SPA with hot module replacement.
+In development, the Vite dev server on port 5175 proxies `/api/*` requests to the uvicorn ASGI server on port 8880. All other routes serve the React SPA with hot module replacement.
 
 ### Production Mode (single server)
 
 ```mermaid
 flowchart LR
-    Browser -->|:8880| Flask[Flask]
-    Flask -->|/api/*| API[Blueprint Routes]
-    Flask -->|/apidocs| Swagger[Flasgger]
-    Flask -->|/swagger| SwaggerUI[Swagger UI]
-    Flask -->|static files| Assets[web_dist/assets/]
-    Flask -->|other paths| Index[web_dist/index.html]
-    API -->|JSON| Browser
+    Browser -->|:8880| API[uvicorn / Starlette]
+    API -->|/api/*| Routers[Domain Routers]
+    API -->|/swagger| SwaggerUI[Static Swagger UI]
+    API -->|/openapi.yaml| Spec[Static OpenAPI spec]
+    API -->|/assets/*| Assets[web_dist/assets/]
+    API -->|other paths| Index[web_dist/index.html]
+    Routers -->|JSON| Browser
     Assets -->|JS/CSS| Browser
     Index -->|HTML| Browser
 ```
 
-When `web_dist/index.html` exists, Flask serves both the API and the SPA from a single process. The catch-all route handles three cases:
+When `web_dist/index.html` exists, the Starlette factory serves both the API and the SPA from a single uvicorn process. The path-converter catch-all handles three cases:
 
 1. **API prefixes** (`api/`, `apidocs`, `flasgger_static`, `apispec`) — returns JSON 404 for missing API routes
 2. **Static files** — serves JS, CSS, and images from `web_dist/`
@@ -57,37 +58,31 @@ When `web_dist/index.html` exists, Flask serves both the API and the SPA from a 
 
 ### API-Only Mode (no web_dist)
 
-When `web_dist/index.html` is absent, Flask serves the built-in demo template at `/` and the API operates standalone. This is the default for development and API-only installs.
+When `web_dist/index.html` is absent, the `main_router` `/` handler returns the built-in demo template and the API operates standalone. This is the default for development and API-only installs.
 
-## Flask Application Factory
+## ASGI Application Factory
 
 ```mermaid
 flowchart TD
-    A[create_app] --> B[Configure Flask]
-    B --> C[Initialize Swagger]
-    C --> D{DEMO_MODE?}
-    D -->|true| E[Enable debug mode]
-    D -->|false| F[Standard config]
-    E --> G{USE_DATABASE?}
-    F --> G
-    G -->|true| H[Init SQLite]
-    G -->|false| I[In-memory stores]
-    H --> J[Register CSP / CORS headers]
-    I --> J
-    J --> K[Register error handlers]
-    K --> L[Import 25+ blueprints]
-    L --> M[Register all blueprints]
-    M --> N[Seed demo data]
-    N --> O{web_dist/index.html?}
-    O -->|exists| P[SPA mode: override / route + catch-all]
-    O -->|absent| Q[API-only mode: demo template on /]
-    P --> R[return app]
-    Q --> R
+    A[create_app] --> B[init_config — populate app_config from env + overrides]
+    B --> C{USE_DATABASE?}
+    C -->|true| D[init_database — SQLAlchemy engine + drop_all/create_all + seed]
+    C -->|false| E[Skip DB init]
+    D --> F[Import 25+ domain routers]
+    E --> F
+    F --> G[Compose middleware stack: TrafficRecorder, BodyBuffer, CORS, Session, CSP]
+    G --> H[Construct Starlette app with routes + middleware + exception_handlers]
+    H --> I[Seed in-memory demo data]
+    I --> J{web_dist/index.html?}
+    J -->|exists| K[Mount /assets + add /\{path:path\} catch-all]
+    J -->|absent| L[main_router serves demo template at /]
+    K --> M[return app]
+    L --> M
 ```
 
-## Blueprint Architecture
+## Router Architecture
 
-Each industry domain is a self-contained Flask blueprint in `app/blueprints/{domain}/`:
+Each industry domain is a self-contained Starlette router in `app/blueprints/{domain}/`. The directory name "blueprints" is preserved from the pre-migration layout; the underlying object is a `DecoratorRouter` (a thin `starlette.routing.Router` subclass that supports `@router.route(...)` decorators):
 
 ```
 app/blueprints/
@@ -127,13 +122,14 @@ flowchart TD
     Routes[Blueprint Routes] --> DS{Data Source}
     DS -->|Default| Mem[In-Memory DataStore]
     DS -->|USE_DATABASE=true| SQLite[SQLite via SQLAlchemy]
-    Mem --> DAL[dal.py: thread-safe CRUD with gevent locks]
+    Mem --> DAL[dal.py: thread-safe CRUD with threading.Lock]
     DAL --> Stores[data_stores.py: 100+ named stores]
-    SQLite --> DB[database.py: real SQL for injection testing]
+    SQLite --> ORM[orm.py: SQLAlchemy 2.0 DeclarativeBase models]
+    SQLite --> DB[database.py: engine + sessionmaker + seed_data]
 ```
 
-- **In-memory mode** (default): `DataStore` and `TransactionalDataStore` classes provide thread-safe CRUD with gevent locks. 100+ named stores defined in `data_stores.py`.
-- **Database mode** (`USE_DATABASE=true`): SQLite via SQLAlchemy enables real SQL injection vulnerabilities.
+- **In-memory mode** (default): `DataStore` and `TransactionalDataStore` classes provide thread-safe CRUD with `threading.Lock`. 100+ named stores defined in `data_stores.py`.
+- **Database mode** (`USE_DATABASE=true`): plain SQLAlchemy 2.0 (no Flask-SQLAlchemy) backs the `database_vulnerable` router with f-string SQL paths used by the SQLi WAF tests. ORM models live in `app/orm.py`; engine/session lifecycle in `app/database.py`.
 
 ## Build Pipeline
 
@@ -159,7 +155,7 @@ The `chimera-api:build` Nx target declares a dependency on `vuln-web:build:bundl
 | Route Type | `style-src` | Reason |
 |------------|-------------|--------|
 | `/swagger`, `/openapi.yaml` | `'self' unpkg.com 'unsafe-inline'` | Swagger UI needs external CDN + inline styles |
-| `/api/*`, `/apidocs`, `/flasgger_static` | `'self'` | Strict CSP for API responses |
+| `/api/*` | `'self'` | Strict CSP for API responses |
 | All other paths (SPA) | `'self' 'unsafe-inline'` | Tailwind/Vite require inline styles |
 
 ## Environment Variables

@@ -1,6 +1,6 @@
-# Chimera - Flask Honeypot Application
+# Chimera - Starlette Honeypot Application
 
-A Python Flask application with 456+ intentionally vulnerable endpoints for testing  WAF capabilities.
+A Python Starlette/uvicorn ASGI application with 456+ intentionally vulnerable endpoints for testing WAF capabilities.
 
 ## 📚 Documentation
 
@@ -19,12 +19,15 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync --extra dev
 
 # 3. Launch the vulnerable demo API
-uv run python app.py
+just run-vulnerable
 
-# Access at http://localhost:5000
+# Or invoke uvicorn directly:
+DEMO_MODE=full uv run uvicorn app.asgi:app --host 0.0.0.0 --port 8880 --reload
+
+# Access at http://localhost:8880
 ```
 
-> **Fallback:** If you prefer pip/virtualenv, `pip install -r requirements.txt` still works, but uv gives faster, reproducible installs and is what the Docker image uses.
+> **Fallback:** uv is the preferred Python toolchain (matches the Docker image). `pip install chimera-api` works for end users that don't need to develop against the source.
 
 ### Docker Deployment
 ```bash
@@ -54,7 +57,7 @@ just test-coverage
 
 ```bash
 # Enable database mode locally
-USE_DATABASE=true uv run python app.py
+USE_DATABASE=true just run-vulnerable
 
 # Enable in Docker
 USE_DATABASE=true docker run -p 8080:80 demo-api
@@ -108,26 +111,31 @@ PROFILE=database RPS=10 DURATION=60 ./scripts/traffic-generator.sh
 - **50+ Vulnerability Types** including SQL injection, XSS, command injection, and more
 - **Thread-Safe Data Layer** with validation bypass for testing
 - **200+ Unit Tests** with 94% code coverage
-- **Gunicorn Server** with gevent workers for async handling
+- **uvicorn / ASGI** server with multiple worker processes in production
 
 ## 📁 Project Structure
 
 ```
-api-demo/
+apps/vuln-api/
 ├── app/                    # Application code
-│   ├── blueprints/        # Domain-specific endpoints
-│   ├── models/           # Data access layer
-│   └── utils/           # Helper utilities
-├── tests/                 # Test suite
-│   ├── unit/           # Unit tests
-│   ├── integration/   # Integration tests
-│   └── vulnerability/ # Security tests
-├── docs/                 # Additional documentation
-├── static/              # Static assets
-├── app.py              # Main application
-├── requirements.txt    # Dependencies
-├── Dockerfile         # Container definition
-└── justfile          # Build automation
+│   ├── asgi.py            # Starlette factory + module-level `app` for uvicorn
+│   ├── __init__.py        # Re-exports `create_app` and `app` from `app.asgi`
+│   ├── blueprints/        # Domain-specific routers (one package per domain)
+│   ├── models/            # In-memory data stores + DataStore / TransactionalDataStore
+│   ├── orm.py             # SQLAlchemy 2.0 ORM (used when USE_DATABASE=true)
+│   ├── routing.py         # DecoratorRouter shim + safe_json / get_json_or_default
+│   └── utils/             # Hotpatch decorator, monitoring, demo data, templates
+├── tests/                  # Test suite (Starlette TestClient)
+│   ├── unit/              # Unit tests
+│   ├── integration/       # Integration tests
+│   └── conftest.py        # Fixtures (client, app, set_session, read_session)
+├── docs/                   # Additional documentation
+├── static/                 # Static assets served via StaticFiles mount
+├── pyproject.toml          # Dependencies (Starlette + uvicorn + SQLAlchemy)
+├── Dockerfile              # Dev container (uvicorn --reload)
+├── Dockerfile.prod         # Production container (uvicorn --workers 4)
+├── Dockerfile.fargate      # ECS/Fargate container
+└── justfile                # Build automation (run-vulnerable, run-secure, test-*)
 ```
 
 ## 🔒 Security Warning
@@ -148,17 +156,17 @@ api-demo/
 
 ```bash
 # SQL Injection
-curl -X POST http://localhost:5000/api/v1/auth/login \
+curl -X POST http://localhost:8880/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin'\'' OR '\''1'\''='\''1","password":"any"}'
 
 # Command Injection
-curl -X POST http://localhost:5000/api/v1/admin/execute \
+curl -X POST http://localhost:8880/api/v1/admin/execute \
   -H "Content-Type: application/json" \
   -d '{"command":"ls; cat /etc/passwd"}'
 
 # Path Traversal
-curl "http://localhost:5000/api/v1/admin/logs?file=../../../../etc/passwd"
+curl "http://localhost:8880/api/v1/admin/logs?file=../../../../etc/passwd"
 ```
 
 ## 📚 Feature Reference

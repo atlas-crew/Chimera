@@ -9,7 +9,7 @@
   <a href="docs/vulnerability-inventory.md"><img src="https://img.shields.io/badge/OWASP_Top_10-100%25-red" alt="OWASP Top 10" /></a>
 </p>
 
-An intentionally vulnerable monorepo for WAF testing and security education. Chimera bundles a Flask API with **456+ vulnerable endpoints** across **25+ industry domains** and a React portal frontend into a single installable package.
+An intentionally vulnerable monorepo for WAF testing and security education. Chimera bundles a Starlette/uvicorn API with **456+ vulnerable endpoints** across **25+ industry domains** and a React portal frontend into a single installable package.
 
 > **Warning**: This application contains deliberate security vulnerabilities. Never deploy to production or expose to the internet without proper WAF protection.
 
@@ -95,7 +95,7 @@ just dev
 | Swagger UI | [http://localhost:8880/swagger](http://localhost:8880/swagger) |
 | Web Portal | [http://localhost:5175](http://localhost:5175) |
 
-The Vite dev server proxies `/api` requests to the Flask backend automatically.
+The Vite dev server proxies `/api` requests to the uvicorn backend automatically.
 
 ### Apparatus Integration (optional)
 
@@ -129,7 +129,7 @@ The new Apparatus integration keeps that boundary intact: Chimera web talks to C
 ```
 Chimera/
 ├── apps/
-│   ├── vuln-api/              # Flask API (Python 3.12, Gunicorn + gevent)
+│   ├── vuln-api/              # Starlette API (Python 3.12, uvicorn ASGI)
 │   │   ├── app/
 │   │   │   ├── blueprints/    # 25+ domain-specific route modules
 │   │   │   ├── models/        # In-memory data stores + optional SQLite
@@ -222,7 +222,7 @@ just web-build           # Production build of the web app
 just web-test            # Run web tests (vitest)
 just web-lint            # Lint the web app
 
-just bundle-web          # Build React SPA into Flask package
+just bundle-web          # Build React SPA into the chimera-api package
 just build-api           # Build Python wheel (auto-bundles web first)
 just publish-api         # Publish chimera-api to PyPI
 

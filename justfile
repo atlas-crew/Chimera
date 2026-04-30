@@ -90,7 +90,7 @@ web-test:
 
 # ── Bundle / Packaging ─────────────────────────────────
 
-# Build the web frontend into the Flask package (app/web_dist/)
+# Build the web frontend into the chimera-api package (app/web_dist/)
 bundle-web:
     pnpm nx run vuln-web:build:bundle
 

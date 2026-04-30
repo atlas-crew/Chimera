@@ -4,14 +4,14 @@ This file provides guidance to AI Agents (claude, codex, gemini, etc) when worki
 
 ## What This Is
 
-Chimera is an **intentionally vulnerable** monorepo for WAF (Web Application Firewall) testing and security education. It contains a Flask API with 456+ vulnerable endpoints across 25+ industry domains and a React portal frontend. **All vulnerabilities are deliberate** — do not "fix" security issues unless explicitly asked.
+Chimera is an **intentionally vulnerable** monorepo for WAF (Web Application Firewall) testing and security education. It contains a Starlette/uvicorn API with 456+ vulnerable endpoints across 25+ industry domains and a React portal frontend. **All vulnerabilities are deliberate** — do not "fix" security issues unless explicitly asked.
 
 ## Monorepo Layout
 
 ```
 Chimera/                    # pnpm + Nx workspace
 ├── apps/
-│   ├── vuln-api/           # Flask/Python backend (Gunicorn + gevent)
+│   ├── vuln-api/           # Starlette/Python backend (uvicorn ASGI)
 │   └── vuln-web/           # React/Vite/TypeScript frontend
 ├── nx.json                 # Nx workspace config
 ├── pnpm-workspace.yaml     # pnpm workspace definition
@@ -40,29 +40,32 @@ pnpm nx run-many -t test --parallel  # All tests in parallel
 pnpm nx affected -t test             # Test only changed projects
 ```
 
-### vuln-api (Python/Flask, Nx project: chimera-api)
+### vuln-api (Python/Starlette, Nx project: chimera-api)
 ```bash
 # Dependencies (uses uv, not pip)
 cd apps/vuln-api && uv sync --extra dev --frozen
 
-# Run locally
-PORT=8880 uv run python app.py                 # Local app.py entrypoint on port 8880
-DEMO_MODE=full uv run python app.py            # Vulnerable mode
-USE_DATABASE=true uv run python app.py         # SQLite for real SQLi
+# Run locally (uvicorn — see justfile for the canonical incantations)
+just -f apps/vuln-api/justfile run-vulnerable      # DEMO_MODE=full on port 8880
+just -f apps/vuln-api/justfile run-secure          # DEMO_MODE=strict, 4 workers
+USE_DATABASE=true just -f apps/vuln-api/justfile run-vulnerable   # SQLite for real SQLi
 
-# Tests via Makefile
-make -C apps/vuln-api test-ci          # CI: unit + coverage, fail-fast
-make -C apps/vuln-api test-unit        # Unit tests with coverage report
-make -C apps/vuln-api test-quick       # Fast feedback (-x --maxfail=5)
-make -C apps/vuln-api test-vulnerability  # Security-specific tests
-make -C apps/vuln-api test-smoke       # Smoke tests
+# Or invoke uvicorn directly:
+DEMO_MODE=full uv run uvicorn app.asgi:app --host 0.0.0.0 --port 8880 --reload
+
+# Tests via justfile
+just -f apps/vuln-api/justfile test-ci             # CI: unit + coverage, fail-fast
+just -f apps/vuln-api/justfile test-unit           # Unit tests with coverage report
+just -f apps/vuln-api/justfile test-quick          # Fast feedback (-x --maxfail=5)
+just -f apps/vuln-api/justfile test-vulnerability  # Security-specific tests
+just -f apps/vuln-api/justfile test-smoke          # Smoke tests
 
 # Single test file
 cd apps/vuln-api && uv run pytest tests/unit/test_auth_routes.py -v
 
 # Formatting / linting
-make -C apps/vuln-api format           # black (120-char lines)
-make -C apps/vuln-api lint             # flake8 + pylint
+just -f apps/vuln-api/justfile format              # black (120-char lines)
+just -f apps/vuln-api/justfile lint                # flake8 + pylint
 ```
 
 ### vuln-web (React/Vite/TypeScript)
@@ -76,15 +79,15 @@ just web-lint           # ESLint
 
 ### vuln-api
 
-**Flask app factory** (`app/__init__.py` → `create_app()`) that registers 25+ blueprints, security headers, error handlers, traffic recorder middleware, and demo data seeding.
+**ASGI app factory** (`app/asgi.py` → `create_app()`) that mounts 25+ routers, security headers + CSP middleware, error handlers, the TrafficRecorder middleware, and demo data seeding. `app/__init__.py` is a thin re-export so `from app import create_app` keeps resolving.
 
-**Blueprint pattern** — each domain lives in `app/blueprints/{domain}/`:
-- `__init__.py` exports `{domain}_bp = Blueprint(...)`
-- `routes.py` contains all endpoints for that domain
-- Registered in `create_app()` via `app.register_blueprint()`
+**Blueprint pattern** — each domain still lives in `app/blueprints/{domain}/` (filesystem name kept after the Flask → Starlette migration):
+- `__init__.py` exports `{domain}_router = DecoratorRouter(routes=[])`
+- `routes.py` contains all endpoints for that domain, decorated with `@{domain}_router.route(...)`
+- Mounted in `create_app()` via `routes.extend({domain}_router.routes)` in `app/asgi.py`
 
-**Data layer** (`app/models/`):
-- `dal.py`: `DataStore` / `TransactionalDataStore` — thread-safe in-memory CRUD with gevent locks
+**Data layer** (`app/models/` for in-memory, `app/orm.py` for SQLAlchemy 2.0):
+- `dal.py`: `DataStore` / `TransactionalDataStore` — thread-safe in-memory CRUD with `threading.Lock`
 - `data_stores.py`: 100+ named stores (`users_db`, `accounts_db`, `medical_records_db`, etc.)
 - Optional SQLite via `USE_DATABASE=true` for real SQL injection endpoints (`app/database.py`)
 
@@ -110,13 +113,13 @@ just web-lint           # ESLint
 
 ### Frontend ↔ Backend
 
-The web app makes `fetch()` calls to `/api/v1/...` endpoints. In development, Vite proxies these to the Flask backend on port 8880. In production (Docker), nginx handles the proxy.
+The web app makes `fetch()` calls to `/api/v1/...` endpoints. In development, Vite proxies these to the uvicorn backend on port 8880. In production (Docker), nginx handles the proxy.
 
 ## Testing Conventions
 
 ### API tests (pytest)
 - `tests/conftest.py` has an **autouse fixture** that clears all in-memory stores before/after each test
-- Fixtures: `client` (Flask test client), `mock_users`, `mock_medical_records`, `sample_user`, `mfa_user`
+- Fixtures: `client` (Starlette `TestClient`, with `raise_server_exceptions=False`), `mock_users`, `mock_medical_records`, `sample_user`, `mfa_user`. `set_session(client, {...})` and `read_session(client)` replace Flask's `session_transaction()` for cookie-based session seeding/reading.
 - Attack payload fixtures: `sql_injection_payloads`, `command_injection_payloads`, `path_traversal_payloads`, etc.
 - Markers: `@pytest.mark.vulnerability`, `@pytest.mark.integration`, `@pytest.mark.smoke`
 - `demo_mode_full` / `demo_mode_strict` fixtures for testing both modes

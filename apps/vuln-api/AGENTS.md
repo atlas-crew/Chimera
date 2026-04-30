@@ -1,18 +1,19 @@
 # Repository Guidelines
 
 ## Project Structure & Ownership
-- `app/`: Flask code split by blueprint domains (`blueprints/`), data layer (`models/`), and helpers (`utils/`).
+- `app/`: Starlette code split by blueprint-style domain packages (`blueprints/`), in-memory data layer (`models/`), SQLAlchemy 2.0 ORM (`orm.py`), and helpers (`utils/`).
+- `app/asgi.py`: ASGI app factory; `app/__init__.py` re-exports `create_app` and `app` for callers using the package root.
 - `tests/`: Unit (`tests/unit`), integration (`tests/integration`), and security/vulnerability suites (`tests/vulnerability`, `tests/smoke`).
 - `docs/` and `API-DOCUMENTATION.md`: Endpoint reference and contributor notes; update when adding routes or payload examples.
-- `static/`: Demo assets served by Flask; keep large files out of git.
-- Entrypoints: `app.py` for local dev, `wsgi.py`/`gunicorn.conf.py` for deployment.
+- `static/`: Demo assets served as Starlette `StaticFiles` mounts; keep large files out of git.
+- Entrypoint: `uvicorn app.asgi:app` (see `Dockerfile*` and `justfile` for the canonical invocations).
 
 ## Build, Run, and Dev Workflow
 - `uv sync --extra dev --frozen`: Install Python 3.12 deps into `.venv` (preferred, matches Docker).
-- `PORT=8880 uv run python app.py`: Launch locally in vulnerable mode on port 8880.
-- `USE_DATABASE=true uv run python app.py`: Enable SQLite-backed SQLi scenarios.
-- `just run` / `just run-vulnerable`: Gunicorn with `DEMO_MODE=full` (intentionally unsafe).
-- `just run-secure`: Hardened mode (`DEMO_MODE=strict`) for control comparisons.
+- `just run` / `just run-vulnerable`: uvicorn with `DEMO_MODE=full --reload` on port 8880 (intentionally unsafe).
+- `just run-secure`: Hardened mode (`DEMO_MODE=strict`) with 4 workers for control comparisons.
+- `USE_DATABASE=true just run-vulnerable`: enable the SQLite-backed SQLi scenarios.
+- Direct invocation: `DEMO_MODE=full uv run uvicorn app.asgi:app --host 0.0.0.0 --port 8880 --reload`.
 - Docker: `docker build -t demo-api .` then `docker run -p 8080:80 demo-api` (honors `USE_DATABASE` env var).
 
 ## Testing Guidelines

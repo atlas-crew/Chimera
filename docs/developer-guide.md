@@ -29,7 +29,7 @@ chimera-api \
 |------|---------|-------------|
 | `--host` | `0.0.0.0` | Bind address |
 | `--port` | `8880` | Server port |
-| `--debug` | off | Enable Flask debug mode |
+| `--debug` | off | Enable debug mode (Starlette debug=True + verbose error responses) |
 | `--demo-mode` | none | `full` or `strict` |
 
 ### Configuration
@@ -125,8 +125,8 @@ just dev
 ```
 
 This starts both servers in parallel via Nx:
-- **Flask API** on `http://localhost:8880`
-- **Vite dev server** on `http://localhost:5175` (proxies `/api/*` to Flask)
+- **Starlette API** (uvicorn) on `http://localhost:8880`
+- **Vite dev server** on `http://localhost:5175` (proxies `/api/*` to uvicorn)
 
 Start individually:
 
@@ -144,13 +144,16 @@ Control vulnerability behavior with `DEMO_MODE`:
 
 ```bash
 # All vulnerabilities active
-DEMO_MODE=full uv run python app.py
+DEMO_MODE=full just -f apps/vuln-api/justfile run-vulnerable
 
 # Dangerous endpoints blocked
-DEMO_MODE=strict uv run python app.py
+DEMO_MODE=strict just -f apps/vuln-api/justfile run-secure
 
 # Real SQL injection via SQLite
-USE_DATABASE=true DEMO_MODE=full uv run python app.py
+USE_DATABASE=true DEMO_MODE=full just -f apps/vuln-api/justfile run-vulnerable
+
+# Or invoke uvicorn directly:
+DEMO_MODE=full uv run uvicorn app.asgi:app --host 0.0.0.0 --port 8880 --reload
 ```
 
 ### Apparatus Integration (optional)
@@ -184,29 +187,37 @@ The Chimera web Admin Dashboard also exposes these controls through the Apparatu
 
 ## Project Structure
 
-### vuln-api (Flask/Python)
+### vuln-api (Starlette/Python)
 
 ```
 apps/vuln-api/
 ├── app/
-│   ├── __init__.py          # App factory (create_app)
+│   ├── asgi.py              # Starlette ASGI factory + module-level `app`
+│   ├── __init__.py          # Re-exports `create_app` and `app` from app.asgi
 │   ├── cli.py               # CLI entry point
-│   ├── blueprints/          # 25+ domain modules (auth, banking, etc.)
+│   ├── routing.py           # DecoratorRouter + safe_json / get_json_or_default
+│   ├── orm.py               # SQLAlchemy 2.0 ORM (used when USE_DATABASE=true)
+│   ├── database.py          # Engine + sessionmaker + seed_data
+│   ├── error_handlers_asgi.py  # Starlette exception handlers + body buffer
+│   ├── middleware/
+│   │   └── traffic_recorder_asgi.py  # ASGI traffic recorder middleware
+│   ├── blueprints/          # 25+ domain packages (filesystem name preserved)
 │   │   └── {domain}/
-│   │       ├── __init__.py  # Blueprint definition
-│   │       └── routes.py    # Endpoint handlers
+│   │       ├── __init__.py  # `{domain}_router = DecoratorRouter(routes=[])`
+│   │       └── routes.py    # Endpoint handlers, decorated with @router.route
 │   ├── models/
-│   │   ├── dal.py           # DataStore (thread-safe CRUD)
+│   │   ├── dal.py           # DataStore (thread-safe CRUD with threading.Lock)
 │   │   └── data_stores.py   # 100+ named stores
-│   ├── utils/               # Helpers, validators, monitoring
-│   ├── web_dist/            # Bundled SPA (populated by build)
-│   └── error_handlers.py    # JSON error responses
+│   ├── utils/               # Hotpatch decorator, monitoring, demo data
+│   └── web_dist/            # Bundled SPA (populated by build)
 ├── tests/
-│   ├── conftest.py          # Shared fixtures, store reset
+│   ├── conftest.py          # Shared fixtures (Starlette TestClient, store reset)
 │   └── unit/                # Unit tests per domain
 ├── pyproject.toml           # Package config (hatchling)
-├── Makefile                 # Test/lint recipes
-└── app.py                   # Development entry point
+├── justfile                 # Run/test/lint recipes
+├── Dockerfile               # Dev container (uvicorn --reload)
+├── Dockerfile.prod          # Production container (uvicorn --workers 4)
+└── Dockerfile.fargate       # ECS/Fargate container
 ```
 
 ### vuln-web (React/TypeScript)
@@ -226,7 +237,7 @@ apps/vuln-web/
 │       ├── RedTeamConsole.tsx # Attack overlay (Ctrl+`)
 │       ├── AiAssistant.tsx  # Chat widget
 │       └── TourGuide.tsx    # Exploit walkthrough
-├── vite.config.ts           # Dev config (proxy to Flask)
+├── vite.config.ts           # Dev config (proxy to uvicorn :8880)
 ├── vite.config.bundle.ts    # Bundle config (output to web_dist)
 └── package.json
 ```
@@ -243,16 +254,16 @@ just test
 just api-test
 
 # Quick feedback (stops on first failure)
-make -C apps/vuln-api test-quick
+just -f apps/vuln-api/justfile test-quick
 
 # Full CI suite with coverage
-make -C apps/vuln-api test-ci
+just -f apps/vuln-api/justfile test-ci
 
 # Single test file
 cd apps/vuln-api && uv run pytest tests/unit/test_auth_routes.py -v
 
 # Vulnerability-specific tests
-make -C apps/vuln-api test-vulnerability
+just -f apps/vuln-api/justfile test-vulnerability
 ```
 
 ### Test Conventions
@@ -261,8 +272,11 @@ make -C apps/vuln-api test-vulnerability
 
 | Fixture | Description |
 |---------|-------------|
-| `client` | Flask test client |
-| `app` | Flask application instance |
+| `client` | Starlette `TestClient` (raise_server_exceptions=False) |
+| `app` | Starlette application instance |
+| `remote_client` | TestClient with non-local source address (auth-gate coverage) |
+| `set_session(client, dict)` | Seed an itsdangerous-signed session cookie |
+| `read_session(client) -> dict` | Decode the session cookie set by the server |
 | `mock_users` | Pre-populated user database |
 | `mock_medical_records` | Pre-populated PHI records |
 | `sample_user` | Single user with known credentials |
@@ -345,26 +359,36 @@ mkdir apps/vuln-api/app/blueprints/mydomain
 
 ```python
 # app/blueprints/mydomain/__init__.py
-from flask import Blueprint
-mydomain_bp = Blueprint('mydomain', __name__)
-from . import routes
+from app.routing import DecoratorRouter as Router
+
+mydomain_router = Router(routes=[])
+
+from . import routes  # noqa: E402,F401  (decorator side-effects)
 ```
 
 ```python
 # app/blueprints/mydomain/routes.py
-from flask import request, jsonify
-from . import mydomain_bp
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
-@mydomain_bp.route('/api/v1/mydomain/items', methods=['GET'])
-def list_items():
-    return jsonify({"items": []})
+from app.routing import safe_json
+from . import mydomain_router
+
+
+@mydomain_router.route('/api/v1/mydomain/items', methods=['GET'])
+async def list_items(request: Request):
+    return JSONResponse({"items": []})
 ```
 
-2. **Register in `create_app()`** (`app/__init__.py`):
+2. **Mount in `create_app()`** (`app/asgi.py`):
 
 ```python
-from app.blueprints.mydomain import mydomain_bp
-app.register_blueprint(mydomain_bp)
+from app.blueprints.mydomain import mydomain_router
+
+routes = [
+    # ... existing routers ...
+    *mydomain_router.routes,
+]
 ```
 
 3. **Add data stores** (if needed) in `app/models/data_stores.py`:
@@ -391,7 +415,7 @@ mydomain_items_db.clear()
 
 - **Formatter**: black with 120-character line length
 - **Linters**: flake8 + pylint
-- **Run**: `make -C apps/vuln-api format` and `make -C apps/vuln-api lint`
+- **Run**: `just -f apps/vuln-api/justfile format` and `just -f apps/vuln-api/justfile lint`
 
 ### TypeScript
 

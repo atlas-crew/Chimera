@@ -592,7 +592,7 @@ This comprehensive endpoint catalog provides **469 unique API endpoints** across
 5. **Blue Team Operations**: Validate that legitimate defensive operations are not blocked while attacks are caught
 
 ### Implementation Status
-- ✅ **100% Complete**: All planned endpoints implemented in Flask API
+- ✅ **100% Complete**: All planned endpoints implemented in the Starlette API
 - ✅ **18+ Categories**: Banking, E-commerce, Insurance, Healthcare, Cloud, ICS/OT, Blue Team, APT
 - ✅ **243 Total Routes**: Comprehensive coverage across offensive and defensive scenarios
 

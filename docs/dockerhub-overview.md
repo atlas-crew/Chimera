@@ -1,6 +1,6 @@
 # Chimera
 
-Intentionally vulnerable application with 456+ endpoints across 25+ industry verticals for WAF testing, security research, and education. Bundles a Flask API and React web portal in a single image.
+Intentionally vulnerable application with 456+ endpoints across 25+ industry verticals for WAF testing, security research, and education. Bundles a Starlette/uvicorn API and React web portal in a single image.
 
 Part of the [Inferno Lab](https://github.com/inferno-lab) security testing suite.
 

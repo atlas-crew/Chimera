@@ -2,7 +2,7 @@
 
 Complete endpoint catalog for the Chimera API. All endpoints are prefixed as shown, and most return JSON.
 
-> **Interactive docs**: Start the server and visit `/swagger` for Swagger UI or `/apidocs` for Flasgger's auto-generated docs.
+> **Interactive docs**: Start the server and visit `/swagger` for the Swagger UI rendered against the static `/openapi.yaml` spec.
 
 ## Authentication
 
