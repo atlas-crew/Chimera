@@ -5,6 +5,8 @@ main:
     url: /architecture
   - title: API Reference
     url: /api-reference
+  - title: FedRAMP Extensions
+    url: /fedramp-openapi-extensions
   - title: Endpoints
     url: /endpoints-catalog
   - title: Portal
