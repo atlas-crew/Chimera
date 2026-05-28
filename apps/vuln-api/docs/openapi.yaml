@@ -528,6 +528,47 @@ paths:
     post:
       tags: [Authentication]
       summary: "User login (SQL injection)"
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: IA
+          controlId: IA-2
+          assertion: user-authentication-is-enforced
+          role: primary
+          rationale: Login attempts should authenticate the claimed user before issuing tokens.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: IA
+          controlId: IA-5
+          assertion: credential-verification-resists-bypass
+          role: supporting
+          rationale: Credential verification should resist injection and weak-secret bypass paths.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-7
+          assertion: failed-login-throttling-is-enforced
+          role: supporting
+          rationale: Repeated failed authentication attempts should be limited and observable.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-2
+          assertion: authentication-events-are-auditable
+          role: supporting
+          rationale: Authentication success and failure events should leave auditable request context.
+      x-vulnerability-class: auth-bypass
+      x-expected-defense:
+        mode: strict
+        behavior: reject-invalid-login
+        successStatus: 401
+        requiredSignals: [authentication-decision, audit-event]
+        notes: Full demo mode may intentionally accept crafted credentials for attack simulation.
+      x-evidence-types: [request-response, auth-token, audit-log]
       requestBody:
         required: false
         content:
@@ -646,6 +687,47 @@ paths:
     get:
       tags: [Banking]
       summary: "Account details (IDOR)"
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-3
+          assertion: banking-account-access-is-enforced
+          role: primary
+          rationale: Account lookups should be limited to resources the caller is authorized to access.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-6
+          assertion: banking-account-least-privilege-is-enforced
+          role: supporting
+          rationale: Banking account access should expose only the least privilege data required.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-2
+          assertion: banking-account-access-is-auditable
+          role: supporting
+          rationale: Account access decisions should leave auditable request context.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: RA
+          controlId: RA-5
+          assertion: banking-idor-risk-is-assessable
+          role: supporting
+          rationale: IDOR probes provide vulnerability assessment evidence for account access paths.
+      x-vulnerability-class: idor
+      x-expected-defense:
+        mode: strict
+        behavior: deny-unauthorized-account-read
+        successStatus: 403
+        requiredSignals: [authorization-decision, audit-event]
+        notes: Full demo mode may intentionally return another user's account details.
+      x-evidence-types: [request-response, seeded-resource, audit-log]
       parameters:
         - name: account_id
           in: path
@@ -770,6 +852,47 @@ paths:
     post:
       tags: [Ecommerce]
       summary: "Checkout submit (race)"
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-3
+          assertion: checkout-actor-is-authorized
+          role: primary
+          rationale: Checkout submission should only act on carts owned by the caller.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: CM
+          controlId: CM-5
+          assertion: checkout-amount-change-is-controlled
+          role: supporting
+          rationale: Checkout totals and payment-sensitive state should not be changed without authorization.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: SI
+          controlId: SI-10
+          assertion: checkout-input-is-validated
+          role: supporting
+          rationale: Checkout payloads should reject malformed or inconsistent order state.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-2
+          assertion: checkout-events-are-auditable
+          role: supporting
+          rationale: Checkout decisions should leave auditable transaction context.
+      x-vulnerability-class: business-logic-abuse
+      x-expected-defense:
+        mode: strict
+        behavior: reject-checkout-race-or-tamper
+        successStatus: 409
+        requiredSignals: [business-rule-decision, audit-event]
+        notes: Full demo mode may intentionally expose checkout race or amount-tampering behavior.
+      x-evidence-types: [request-response, seeded-resource, audit-log]
       requestBody:
         required: false
         content:
@@ -3268,6 +3391,47 @@ paths:
     get:
       tags: [Compliance]
       summary: Get
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: RA
+          controlId: RA-5
+          assertion: compliance-status-supports-risk-assessment
+          role: primary
+          rationale: Compliance status evidence can support vulnerability and risk assessment context.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: CA
+          controlId: CA-7
+          assertion: compliance-status-supports-continuous-monitoring
+          role: supporting
+          rationale: Compliance posture reads can provide continuous monitoring evidence for assessment workflows.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: CM
+          controlId: CM-6
+          assertion: compliance-status-configuration-is-verifiable
+          role: supporting
+          rationale: Reported compliance status should be traceable to verifiable configuration state.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-6
+          assertion: compliance-status-review-is-auditable
+          role: supporting
+          rationale: Compliance status review should leave auditable assessment context.
+      x-vulnerability-class: insecure-configuration
+      x-expected-defense:
+        mode: strict
+        behavior: restrict-compliance-status-read
+        successStatus: 403
+        requiredSignals: [authorization-decision, audit-event]
+        notes: Full demo mode may intentionally expose compliance posture to unauthenticated callers.
+      x-evidence-types: [request-response, config-state, openapi-operation]
       responses:
         '200':
           description: OK
@@ -4876,6 +5040,47 @@ paths:
     post:
       tags: [Authentication]
       summary: Post
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: IA
+          controlId: IA-2
+          assertion: mfa-authentication-is-enforced
+          role: primary
+          rationale: MFA verification should complete user authentication before session elevation.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: IA
+          controlId: IA-2(1)
+          assertion: mfa-factor-is-required
+          role: primary
+          rationale: Privileged or sensitive access paths should require a valid second factor.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: IA
+          controlId: IA-5
+          assertion: mfa-secret-verification-resists-bypass
+          role: supporting
+          rationale: MFA codes and recovery paths should resist replay and bypass attempts.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-2
+          assertion: mfa-events-are-auditable
+          role: supporting
+          rationale: MFA success and failure events should leave auditable request context.
+      x-vulnerability-class: auth-bypass
+      x-expected-defense:
+        mode: strict
+        behavior: reject-invalid-mfa
+        successStatus: 401
+        requiredSignals: [authentication-decision, audit-event]
+        notes: Full demo mode may intentionally allow weak or replayed MFA values.
+      x-evidence-types: [request-response, session-cookie, audit-log]
       requestBody:
         required: false
         content:
@@ -5180,6 +5385,47 @@ paths:
     get:
       tags: [Healthcare]
       summary: Get
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-3
+          assertion: healthcare-record-access-is-enforced
+          role: primary
+          rationale: Patient record reads should be limited to authorized users and care contexts.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-2
+          assertion: healthcare-record-access-is-auditable
+          role: supporting
+          rationale: PHI access decisions should leave auditable request context.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: SI
+          controlId: SI-10
+          assertion: healthcare-record-id-input-is-validated
+          role: supporting
+          rationale: Record identifiers should be validated before returning sensitive data.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: RA
+          controlId: RA-5
+          assertion: healthcare-phi-exposure-risk-is-assessable
+          role: supporting
+          rationale: PHI exposure probes provide vulnerability assessment evidence for record access paths.
+      x-vulnerability-class: sensitive-data-exposure
+      x-expected-defense:
+        mode: strict
+        behavior: deny-unauthorized-healthcare-record-read
+        successStatus: 403
+        requiredSignals: [authorization-decision, audit-event]
+        notes: Full demo mode may intentionally return records without patient or provider authorization checks.
+      x-evidence-types: [request-response, seeded-resource, audit-log]
       parameters:
         - name: record_id
           in: path
@@ -5213,6 +5459,47 @@ paths:
     post:
       tags: [Payments]
       summary: Post
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-3
+          assertion: payment-capture-is-authorized
+          role: primary
+          rationale: Payment capture should only be allowed for authorized merchants and payment intents.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: SC
+          controlId: SC-13
+          assertion: payment-cryptographic-protection-is-enforced
+          role: supporting
+          rationale: Payment capture evidence should preserve cryptographic protection expectations for sensitive transaction data.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: SI
+          controlId: SI-10
+          assertion: payment-capture-input-is-validated
+          role: supporting
+          rationale: Capture amounts and identifiers should be validated before transaction state changes.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-2
+          assertion: payment-capture-events-are-auditable
+          role: supporting
+          rationale: Payment capture decisions should leave auditable transaction context.
+      x-vulnerability-class: business-logic-abuse
+      x-expected-defense:
+        mode: strict
+        behavior: reject-unauthorized-or-invalid-capture
+        successStatus: 400
+        requiredSignals: [authorization-decision, audit-event]
+        notes: Full demo mode may intentionally allow over-capture or merchant boundary bypass behavior.
+      x-evidence-types: [request-response, seeded-resource, audit-log]
       requestBody:
         required: false
         content:
@@ -5350,6 +5637,47 @@ paths:
     get:
       tags: [SaaS]
       summary: Get
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-3
+          assertion: tenant-project-access-is-enforced
+          role: primary
+          rationale: Cross-tenant project reads should be denied and audited.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-4
+          assertion: tenant-project-flow-is-controlled
+          role: supporting
+          rationale: Tenant project data should not flow across tenant boundaries.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-6
+          assertion: tenant-project-least-privilege-is-enforced
+          role: supporting
+          rationale: Project listing should expose only resources permitted for the caller's tenant role.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-2
+          assertion: denied-tenant-access-is-auditable
+          role: supporting
+          rationale: Authorization failures should leave auditable request context.
+      x-vulnerability-class: cross-tenant-access
+      x-expected-defense:
+        mode: strict
+        behavior: deny-cross-tenant-project-read
+        successStatus: 403
+        requiredSignals: [authorization-decision, audit-event]
+        notes: Full demo mode may intentionally return another tenant's project list.
+      x-evidence-types: [request-response, tenant-fixture, audit-log]
       parameters:
         - name: tenant_id
           in: path
@@ -5636,6 +5964,55 @@ paths:
     post:
       tags: [Admin]
       summary: Suspend audit logging
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-2
+          assertion: audit-events-remain-enabled
+          role: primary
+          rationale: Audit event generation should not be suppressible through an unreviewed API action.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-6
+          assertion: audit-suspension-is-reviewable
+          role: supporting
+          rationale: Attempts to suspend audit logging should be reviewable by authorized operators.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-9
+          assertion: audit-records-are-protected
+          role: supporting
+          rationale: Audit records and audit configuration should be protected from tampering.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-6
+          assertion: audit-admin-action-is-least-privilege
+          role: supporting
+          rationale: Only authorized administrative roles should be able to change audit posture.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: CM
+          controlId: CM-5
+          assertion: audit-configuration-change-is-controlled
+          role: supporting
+          rationale: Audit configuration changes should require controlled authorization and traceability.
+      x-vulnerability-class: audit-suppression
+      x-expected-defense:
+        mode: strict
+        behavior: deny-audit-suspension
+        successStatus: 403
+        requiredSignals: [authorization-decision, audit-event, config-change-event]
+        notes: Full demo mode may intentionally allow audit suppression for evidence collection.
+      x-evidence-types: [request-response, audit-log, config-state]
       requestBody:
         required: false
         content:
@@ -5649,6 +6026,55 @@ paths:
     get:
       tags: [Admin]
       summary: Read global security configuration
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: CM
+          controlId: CM-2
+          assertion: security-configuration-baseline-is-visible
+          role: primary
+          rationale: Security configuration reads can provide baseline evidence for current protection state.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: CM
+          controlId: CM-3
+          assertion: security-configuration-change-context-is-available
+          role: supporting
+          rationale: Configuration state should be attributable to controlled changes.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: CM
+          controlId: CM-6
+          assertion: security-configuration-settings-are-verifiable
+          role: supporting
+          rationale: Security settings should be inspectable for secure baseline verification.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-6
+          assertion: security-configuration-read-is-least-privilege
+          role: supporting
+          rationale: Global security configuration should only be readable by authorized administrative roles.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-2
+          assertion: security-configuration-read-is-auditable
+          role: supporting
+          rationale: Security configuration reads should leave auditable administrative context.
+      x-vulnerability-class: insecure-configuration
+      x-expected-defense:
+        mode: strict
+        behavior: restrict-security-config-read
+        successStatus: 403
+        requiredSignals: [authorization-decision, audit-event]
+        notes: Full demo mode may intentionally expose security posture details to unauthenticated callers.
+      x-evidence-types: [request-response, config-state, audit-log]
       responses:
         '200':
           description: OK
@@ -5827,6 +6253,47 @@ paths:
     post:
       tags: [Integrations]
       summary: Simulate a WebSocket frame
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: SC
+          controlId: SC-7
+          assertion: integration-boundary-traffic-is-restricted
+          role: primary
+          rationale: Integration traffic should be restricted at system boundaries.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: SC
+          controlId: SC-8
+          assertion: websocket-transport-protection-is-expected
+          role: supporting
+          rationale: WebSocket-style integration evidence should preserve transport protection expectations.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-4
+          assertion: integration-frame-flow-is-controlled
+          role: supporting
+          rationale: Integration frames should not move data across unauthorized trust boundaries.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: SI
+          controlId: SI-10
+          assertion: integration-frame-input-is-validated
+          role: supporting
+          rationale: Simulated integration frames should reject malformed or untrusted payloads.
+      x-vulnerability-class: service-trust-abuse
+      x-expected-defense:
+        mode: strict
+        behavior: reject-untrusted-integration-frame
+        successStatus: 400
+        requiredSignals: [input-validation-decision, boundary-decision]
+        notes: Full demo mode may intentionally accept forged integration frames.
+      x-evidence-types: [request-response, runner-artifact, openapi-operation]
       requestBody:
         required: false
         content:
@@ -5939,6 +6406,47 @@ paths:
     get:
       tags: [Database Vuln]
       summary: "User profile lookup (error-based SQLi, USE_DATABASE=true)"
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-3
+          assertion: user-profile-access-is-enforced
+          role: primary
+          rationale: Profile lookup should only return records the caller is authorized to access.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AC
+          controlId: AC-6
+          assertion: user-profile-least-privilege-is-enforced
+          role: supporting
+          rationale: Profile lookup should expose only data required by the caller's role.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: IA
+          controlId: IA-4
+          assertion: user-identifier-binding-is-enforced
+          role: supporting
+          rationale: User identifiers in profile requests should bind to authenticated subjects.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-2
+          assertion: user-profile-access-is-auditable
+          role: supporting
+          rationale: Profile access decisions should leave auditable request context.
+      x-vulnerability-class: idor
+      x-expected-defense:
+        mode: strict
+        behavior: deny-unauthorized-profile-read
+        successStatus: 403
+        requiredSignals: [authorization-decision, audit-event]
+        notes: Database mode exposes this endpoint for error-based SQL injection and profile access probes.
+      x-evidence-types: [request-response, auth-token, seeded-resource]
       parameters:
         - in: query
           name: user_id

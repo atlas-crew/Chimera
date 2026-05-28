@@ -12,6 +12,12 @@ Most endpoints accept requests without authentication (intentionally). Endpoints
 - **API key header**: `X-API-Key: <key>`
 - **Session cookie**: Set after login via `/api/v1/auth/login`
 
+## FedRAMP Annotation Slice
+
+The static `/openapi.yaml` spec includes machine-readable FedRAMP extensions on the first control-mapped endpoint slice. Consumers should read `x-fedramp-controls`, `x-vulnerability-class`, `x-expected-defense`, and `x-evidence-types` from OpenAPI operations rather than parsing this narrative reference.
+
+Annotated domains: auth, users, SaaS tenants, admin/audit, healthcare, banking, ecommerce, payments, compliance-oriented configuration, and integrations.
+
 ---
 
 ## System

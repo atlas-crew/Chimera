@@ -92,8 +92,19 @@ Fields:
 | `mode` | string | yes | Usually `strict`; use `external` for evidence that must come from a proxy, TLS probe, or other system. |
 | `behavior` | string | yes | Machine-safe expected-defense slug. |
 | `successStatus` | integer or string | no | Expected status or status family such as `4xx`. |
-| `requiredSignals` | array | no | Supporting signals such as `audit-event`, `authorization-decision`, or `rate-limit-event`. |
+| `requiredSignals` | array | no | Supporting signals from the allowed list below. |
 | `notes` | string | no | Keep short and test-oriented. |
+
+Allowed `requiredSignals` values for the first FedRAMP slice:
+
+- `audit-event`
+- `authentication-decision`
+- `authorization-decision`
+- `boundary-decision`
+- `business-rule-decision`
+- `config-change-event`
+- `input-validation-decision`
+- `rate-limit-event`
 
 ### `x-evidence-types`
 
@@ -161,6 +172,7 @@ tasks should add the annotations directly to `apps/vuln-api/docs/openapi.yaml`.
 | banking | `GET` | `/api/v1/banking/accounts/{account_id}` | `idor` | `AC-3`, `AC-6`, `AU-2`, `RA-5` | `request-response`, `seeded-resource`, `audit-log` |
 | ecommerce | `POST` | `/api/v1/ecommerce/checkout/submit` | `business-logic-abuse` | `AC-3`, `CM-5`, `SI-10`, `AU-2` | `request-response`, `seeded-resource`, `audit-log` |
 | payments | `POST` | `/api/v1/payments/capture` | `business-logic-abuse` | `AC-3`, `SC-13`, `SI-10`, `AU-2` | `request-response`, `seeded-resource`, `audit-log` |
+| compliance | `GET` | `/api/compliance/status` | `insecure-configuration` | `RA-5`, `CA-7`, `CM-6`, `AU-6` | `request-response`, `config-state`, `openapi-operation` |
 | admin/config | `GET` | `/api/v1/admin/security-config` | `insecure-configuration` | `CM-2`, `CM-3`, `CM-6`, `AC-6`, `AU-2` | `request-response`, `config-state`, `audit-log` |
 | audit | `POST` | `/api/v1/admin/audit/suspend` | `audit-suppression` | `AU-2`, `AU-6`, `AU-9`, `AC-6`, `CM-5` | `request-response`, `audit-log`, `config-state` |
 | integrations | `POST` | `/api/v1/integrations/ws/simulate-frame` | `service-trust-abuse` | `SC-7`, `SC-8`, `AC-4`, `SI-10` | `request-response`, `runner-artifact`, `openapi-operation` |
@@ -195,6 +207,8 @@ FedRAMP annotation validation should fail when:
 - `controlId` does not match a FedRAMP/NIST-style ID such as `AC-3` or `AU-9(4)`;
 - `family` does not match the `controlId` prefix;
 - `baselines` contains a value outside `low`, `moderate`, `high`, or `li-saas`;
+- `role` is not `primary`, `supporting`, or `manual`;
+- `requiredSignals` contains a value outside the documented allowed list;
 - a Crucible scenario references an endpoint method/path that is no longer in OpenAPI;
 - a Crucible scenario references a `fedrampAssertion` that is not present on that operation;
 - a scenario claims a control that is not listed in the operation's `x-fedramp-controls`;
