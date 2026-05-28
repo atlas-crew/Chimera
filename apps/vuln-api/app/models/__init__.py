@@ -95,6 +95,7 @@ __all__ = [
     # Compliance stores
     'compliance_logs_db',
     'audit_suppressions_db',
+    'audit_state_lock',
     # Infrastructure stores
     'cloud_service_registry',
     'apt_operations_log',

@@ -4,7 +4,7 @@ Demonstrates privilege escalation, command injection, and admin panel vulnerabil
 """
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import binascii
 import uuid
 import random
@@ -12,8 +12,19 @@ import base64
 
 from . import admin_router
 from app.models import *
-from app.routing import get_json_or_default
+from app.routing import get_json_or_default, get_json_value
 from app.utils.security_config import security_config
+
+
+def _is_strict_mode_enabled(value):
+    """Accept common JSON encodings for the strict comparison path."""
+    if value is True:
+        return True
+    if isinstance(value, str):
+        return value.lower() == 'true'
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value == 1
+    return False
 
 
 # ============================================================================
@@ -44,15 +55,63 @@ async def suspend_audit(request: Request):
     Suspend global auditing.
     VULNERABILITY: Compliance Violation, Audit Log Suppression
     """
-    data = await get_json_or_default(request)
+    body = await request.body()
+    data = await get_json_value(request, default={}) if body else {}
+    if data is None or not isinstance(data, dict):
+        data = {}
     duration = data.get('duration_minutes', 5)
     reason = data.get('reason', 'Maintenance')
-    
+    actor = data.get('actor') or 'fedramp-admin'
+    suppression_id = data.get('suppression_id') or 'fedramp-audit-suppression-endpoint'
+    log_id = data.get('log_id') or 'fedramp-audit-suspend-endpoint'
+    now = datetime.now(timezone.utc).isoformat()
+    compliance_log = {
+        'log_id': log_id,
+        'event': 'audit_suspension',
+        'actor': actor,
+        'reason': reason,
+        'duration_minutes': duration,
+        'framework': 'fedramp',
+        'controls': ['AU-2', 'AU-6', 'AU-9', 'AC-6', 'CM-5'],
+        'timestamp': now,
+    }
+
+    if _is_strict_mode_enabled(data.get('strict_mode')):
+        compliance_log['decision'] = 'deny'
+        with audit_state_lock:
+            compliance_logs_db[log_id] = compliance_log
+        return JSONResponse({
+            'error': 'Audit suspension denied in strict mode',
+            'status': 'auditing_active',
+            'strict_mode': True,
+            'audit_logged': True,
+            'log_id': log_id,
+            'expected_defense': 'deny-audit-suspension'
+        }, status_code=403)
+
+    with audit_state_lock:
+        audit_suppressions_db[:] = [
+            suppression for suppression in audit_suppressions_db if suppression.get('suppression_id') != suppression_id
+        ]
+        audit_suppressions_db.append({
+            'suppression_id': suppression_id,
+            'actor': actor,
+            'reason': reason,
+            'duration_minutes': duration,
+            'created_at': now,
+            'fedramp_endpoint_fixture': True,
+        })
+        compliance_log['decision'] = 'allow'
+        compliance_logs_db[log_id] = compliance_log
+
     return JSONResponse({
         'status': 'auditing_suspended',
         'duration': duration,
         'reason': reason,
-        'timestamp': datetime.now().isoformat(),
+        'timestamp': now,
+        'suppression_id': suppression_id,
+        'log_id': log_id,
+        'audit_logged': False,
         'warning': 'Global audit logging has been suspended'
     })
 

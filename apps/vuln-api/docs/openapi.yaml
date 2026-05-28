@@ -3544,7 +3544,69 @@ paths:
   /api/defense/metrics:
     get:
       tags: [Security Ops]
-      summary: Get
+      summary: Defensive security metrics
+      x-fedramp-controls:
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: RA
+          controlId: RA-5
+          assertion: vulnerability-risk-metrics-are-available
+          role: primary
+          rationale: Deterministic vulnerability metrics provide assessment evidence for risk and vulnerability monitoring.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: SI
+          controlId: SI-4
+          assertion: monitoring-signals-are-measurable
+          role: supporting
+          rationale: Defensive metrics expose monitoring signal counts for continuous monitoring scenarios.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: SI
+          controlId: SI-10
+          assertion: metric-inputs-are-validated
+          role: supporting
+          rationale: Strict comparison output can show whether metric tampering would be denied.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: CA
+          controlId: CA-7
+          assertion: continuous-monitoring-evidence-is-repeatable
+          role: supporting
+          rationale: Stable metrics support repeatable continuous monitoring evidence collection.
+        - framework: fedramp
+          revision: rev5
+          baselines: [moderate, high]
+          family: AU
+          controlId: AU-6
+          assertion: monitoring-metrics-support-review
+          role: supporting
+          rationale: Metrics can support audit review of security monitoring effectiveness.
+      x-vulnerability-class: insecure-configuration
+      x-expected-defense:
+        mode: strict
+        behavior: deny-unauthorized-metric-tampering
+        successStatus: 200
+        requiredSignals: [audit-event, input-validation-decision]
+        notes: FedRAMP query mode returns deterministic evidence; strict comparison marks metric tampering as denied.
+      x-evidence-types: [request-response, config-state, audit-log, openapi-operation]
+      parameters:
+        - name: fedramp
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Return deterministic FedRAMP RA/SI evidence metrics.
+        - name: strict_mode
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Return strict comparison metadata for metric-tampering defenses.
       responses:
         '200':
           description: OK
@@ -6019,9 +6081,30 @@ paths:
           application/json:
             schema:
               type: object
+              properties:
+                duration_minutes:
+                  type: integer
+                  description: Requested audit-suppression duration in minutes.
+                reason:
+                  type: string
+                  description: Caller-provided suppression reason.
+                actor:
+                  type: string
+                  description: Demo actor requesting the audit change.
+                suppression_id:
+                  type: string
+                  description: Optional deterministic suppression record ID.
+                log_id:
+                  type: string
+                  description: Optional deterministic compliance log ID.
+                strict_mode:
+                  type: boolean
+                  description: When true, return strict comparison behavior and deny the suppression.
       responses:
         '200':
           description: OK
+        '403':
+          description: Audit suspension denied in strict mode
   /api/v1/admin/security-config:
     get:
       tags: [Admin]

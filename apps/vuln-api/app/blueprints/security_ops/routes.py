@@ -169,6 +169,63 @@ async def security_alerts_acknowledge(request: Request):
 @security_ops_router.route('/api/defense/metrics')
 async def defense_metrics(request: Request):
     """Get defensive security metrics"""
+    fedramp_mode = request.query_params.get('fedramp', 'false').lower() == 'true'
+    strict_mode = request.query_params.get('strict_mode', 'false').lower() == 'true'
+
+    if fedramp_mode:
+        return JSONResponse({
+            'metrics_period': '24_hours',
+            'detection_metrics': {
+                'total_events_processed': 2400000,
+                'alerts_generated': 128,
+                'true_positives': 32,
+                'false_positives': 8,
+                'detection_rate': 96.5,
+                'false_positive_rate': 6.25
+            },
+            'response_metrics': {
+                'incidents_created': 6,
+                'incidents_resolved': 5,
+                'mean_time_to_detect_minutes': 7,
+                'mean_time_to_respond_minutes': 18,
+                'mean_time_to_resolve_hours': 4.5,
+                'automation_rate': 72.0
+            },
+            'threat_metrics': {
+                'threats_blocked': 1800,
+                'malware_detected': 64,
+                'phishing_attempts': 140,
+                'brute_force_attacks': 320,
+                'ddos_attempts': 3
+            },
+            'vulnerability_metrics': {
+                'vulnerabilities_discovered': 14,
+                'vulnerabilities_remediated': 11,
+                'mean_time_to_patch_days': 5.0,
+                'systems_scanned': 640,
+                'patch_compliance_rate': 92.5
+            },
+            'fedramp_evidence': {
+                'mode': 'strict' if strict_mode else 'vulnerable',
+                'controls': ['RA-5', 'SI-4', 'SI-10', 'CA-7', 'AU-6'],
+                'required_signals': ['audit-event', 'input-validation-decision'],
+                'risk_findings': [
+                    {
+                        'finding_id': 'FEDRAMP-RA-5-001',
+                        'severity': 'high',
+                        'source_endpoint': '/api/defense/metrics',
+                        'status': 'open' if not strict_mode else 'blocked'
+                    }
+                ],
+                'strict_comparison': {
+                    'monitoring_disabled': False,
+                    'unauthorized_metric_tampering': 'denied' if strict_mode else 'not-enforced'
+                }
+            },
+            'timestamp': '2026-05-01T00:00:00',
+            'dashboard_url': 'https://soc.example.com/fedramp/metrics'
+        })
+
     return JSONResponse({
         'metrics_period': '24_hours',
         'detection_metrics': {

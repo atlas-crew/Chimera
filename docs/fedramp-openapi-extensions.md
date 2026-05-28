@@ -161,6 +161,12 @@ Allowed values for the first FedRAMP slice:
 
 This seed map defines the first high-value OpenAPI operations to annotate. Later
 tasks should add the annotations directly to `apps/vuln-api/docs/openapi.yaml`.
+The table columns summarize the matching `x-vulnerability-class`, control-ID
+coverage, and `x-evidence-types` OpenAPI extension keys. The FedRAMP controls
+column is an index of control IDs, not a literal `x-fedramp-controls` object;
+OpenAPI annotations must still use the full schema above with endpoint-specific
+`assertion`, `role`, and `rationale` values. Unversioned paths in the table
+intentionally mirror existing Chimera routes.
 
 | Domain | Method | Path | Vulnerability class | FedRAMP controls | Evidence types |
 | --- | --- | --- | --- | --- | --- |
@@ -173,9 +179,30 @@ tasks should add the annotations directly to `apps/vuln-api/docs/openapi.yaml`.
 | ecommerce | `POST` | `/api/v1/ecommerce/checkout/submit` | `business-logic-abuse` | `AC-3`, `CM-5`, `SI-10`, `AU-2` | `request-response`, `seeded-resource`, `audit-log` |
 | payments | `POST` | `/api/v1/payments/capture` | `business-logic-abuse` | `AC-3`, `SC-13`, `SI-10`, `AU-2` | `request-response`, `seeded-resource`, `audit-log` |
 | compliance | `GET` | `/api/compliance/status` | `insecure-configuration` | `RA-5`, `CA-7`, `CM-6`, `AU-6` | `request-response`, `config-state`, `openapi-operation` |
+| security ops | `GET` | `/api/defense/metrics` | `insecure-configuration` | `RA-5`, `SI-4`, `SI-10`, `CA-7`, `AU-6` | `request-response`, `config-state`, `audit-log`, `openapi-operation` |
 | admin/config | `GET` | `/api/v1/admin/security-config` | `insecure-configuration` | `CM-2`, `CM-3`, `CM-6`, `AC-6`, `AU-2` | `request-response`, `config-state`, `audit-log` |
 | audit | `POST` | `/api/v1/admin/audit/suspend` | `audit-suppression` | `AU-2`, `AU-6`, `AU-9`, `AC-6`, `CM-5` | `request-response`, `audit-log`, `config-state` |
 | integrations | `POST` | `/api/v1/integrations/ws/simulate-frame` | `service-trust-abuse` | `SC-7`, `SC-8`, `AC-4`, `SI-10` | `request-response`, `runner-artifact`, `openapi-operation` |
+
+## Endpoint Gap Decisions
+
+The first FedRAMP scenario pack uses the following endpoint behavior decisions.
+Implemented gaps have deterministic vulnerable output and, where useful, a strict
+comparison path. Deferred gaps stay documented so Crucible scenarios do not infer
+coverage from OpenAPI annotations alone.
+
+`/api/compliance/status` and `/api/defense/metrics` are intentionally listed as
+unversioned paths because the current Chimera routes are unversioned.
+
+| Family | Decision | Endpoint behavior |
+| --- | --- | --- |
+| AC | Implemented | Tenant, user-profile, banking, healthcare, admin-config, and audit endpoints expose authorization-control evidence. |
+| AU | Implemented | `/api/v1/admin/audit/suspend` now records deterministic suppression and compliance-log evidence; `strict_mode: true` returns a 403 denial comparison. |
+| IA | Implemented | Auth login, MFA verification, SAML/SSO, and government/SaaS role endpoints provide identity and authenticator evidence. |
+| SC | Deferred to integration slice | `/api/v1/integrations/ws/simulate-frame` remains the initial boundary/trust endpoint; deeper TLS/proxy evidence is external. |
+| SI | Implemented | `/api/defense/metrics?fedramp=true` returns deterministic monitoring, validation, and risk-signal evidence. |
+| CM | Implemented | Admin security-config and audit-suspend endpoints expose deterministic configuration-state and change-control evidence. |
+| RA | Implemented | `/api/defense/metrics?fedramp=true` returns deterministic vulnerability and risk findings for assessment scenarios. |
 
 ## Deterministic FedRAMP Demo Fixtures
 
@@ -245,7 +272,9 @@ The text output is intended for local and CI logs. The `--json` output is stable
 for Crucible compatibility-matrix automation and includes `annotated_count`,
 `annotated_operations`, and `errors`.
 
-FedRAMP annotation validation should fail when:
+The local Chimera validator checks OpenAPI annotation shape and allowed values.
+Crucible scenario compatibility checks use its scenario/catalog pipeline against
+the validator's JSON output. Together, validation should fail when:
 
 - a FedRAMP-relevant operation lacks any required extension;
 - `controlId` does not match a FedRAMP/NIST-style ID such as `AC-3` or `AU-9(4)`;

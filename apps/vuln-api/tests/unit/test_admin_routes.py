@@ -15,6 +15,7 @@ Tests cover:
 import json
 import base64
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 
@@ -181,6 +182,270 @@ class TestSystemConfiguration:
         data = response.json()
         assert data['status'] == 'updated'
         assert 'config' in data
+
+    def test_audit_suspend_records_deterministic_fedramp_suppression(self, client):
+        """Test vulnerable audit suspension records deterministic FedRAMP evidence."""
+        import app.models as _models
+
+        response = client.post(
+            '/api/v1/admin/audit/suspend',
+            json={
+                'duration_minutes': 15,
+                'reason': 'fedramp demo suppression',
+                'actor': 'fedramp-admin'
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['status'] == 'auditing_suspended'
+        assert data['suppression_id'] == 'fedramp-audit-suppression-endpoint'
+        assert data['log_id'] == 'fedramp-audit-suspend-endpoint'
+        assert data['audit_logged'] is False
+        assert data['timestamp'].endswith('+00:00')
+
+        endpoint_suppressions = [
+            suppression for suppression in _models.audit_suppressions_db
+            if suppression.get('suppression_id') == 'fedramp-audit-suppression-endpoint'
+        ]
+        assert endpoint_suppressions == [{
+            'suppression_id': 'fedramp-audit-suppression-endpoint',
+            'actor': 'fedramp-admin',
+            'reason': 'fedramp demo suppression',
+            'duration_minutes': 15,
+            'created_at': data['timestamp'],
+            'fedramp_endpoint_fixture': True,
+        }]
+        compliance_log = _models.compliance_logs_db['fedramp-audit-suspend-endpoint']
+        assert compliance_log['decision'] == 'allow'
+        assert compliance_log['controls'] == ['AU-2', 'AU-6', 'AU-9', 'AC-6', 'CM-5']
+
+    def test_audit_suspend_strict_mode_denies_and_logs_decision(self, client):
+        """Test strict-mode audit suspension returns comparison behavior."""
+        import app.models as _models
+
+        response = client.post(
+            '/api/v1/admin/audit/suspend',
+            json={
+                'duration_minutes': 15,
+                'reason': 'fedramp strict suppression',
+                'actor': 'fedramp-admin',
+                'strict_mode': True
+            }
+        )
+
+        assert response.status_code == 403
+        data = response.json()
+        assert data['status'] == 'auditing_active'
+        assert data['strict_mode'] is True
+        assert data['audit_logged'] is True
+        assert data['expected_defense'] == 'deny-audit-suspension'
+        endpoint_suppressions = [
+            suppression for suppression in _models.audit_suppressions_db
+            if suppression.get('suppression_id') == 'fedramp-audit-suppression-endpoint'
+        ]
+        assert endpoint_suppressions == []
+        assert _models.compliance_logs_db['fedramp-audit-suspend-endpoint']['decision'] == 'deny'
+
+    def test_audit_suspend_null_ids_fall_back_to_deterministic_defaults(self, client):
+        """Test null IDs cannot create None-keyed FedRAMP evidence records."""
+        import app.models as _models
+
+        response = client.post(
+            '/api/v1/admin/audit/suspend',
+            json={'suppression_id': None, 'log_id': None}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['suppression_id'] == 'fedramp-audit-suppression-endpoint'
+        assert data['log_id'] == 'fedramp-audit-suspend-endpoint'
+        assert None not in _models.compliance_logs_db
+        assert _models.compliance_logs_db['fedramp-audit-suspend-endpoint']['actor'] == 'fedramp-admin'
+
+    @pytest.mark.parametrize('payload', [[], ''])
+    def test_audit_suspend_non_object_json_uses_defaults(self, client, payload):
+        """Test non-object JSON payloads use audit suspension defaults."""
+        response = client.post(
+            '/api/v1/admin/audit/suspend',
+            json=payload
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['status'] == 'auditing_suspended'
+        assert data['duration'] == 5
+        assert data['reason'] == 'Maintenance'
+        assert data['suppression_id'] == 'fedramp-audit-suppression-endpoint'
+
+    def test_audit_suspend_empty_body_uses_defaults(self, client):
+        """Test empty audit suspension requests use deterministic defaults."""
+        response = client.post('/api/v1/admin/audit/suspend', content=b'')
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['status'] == 'auditing_suspended'
+        assert data['duration'] == 5
+        assert data['reason'] == 'Maintenance'
+        assert data['suppression_id'] == 'fedramp-audit-suppression-endpoint'
+
+    @pytest.mark.parametrize('strict_value', ['true', 'True', 'TRUE', 1, 1.0])
+    def test_audit_suspend_strict_mode_alt_encodings_deny(self, client, strict_value):
+        """Test alternate strict-mode encodings still follow the deny path."""
+        import app.models as _models
+
+        response = client.post(
+            '/api/v1/admin/audit/suspend',
+            json={
+                'strict_mode': strict_value,
+                'suppression_id': f'fedramp-strict-{strict_value}',
+                'log_id': f'fedramp-strict-log-{strict_value}'
+            }
+        )
+
+        assert response.status_code == 403
+        data = response.json()
+        assert data['status'] == 'auditing_active'
+        assert data['audit_logged'] is True
+        assert data['expected_defense'] == 'deny-audit-suspension'
+        assert not [
+            suppression for suppression in _models.audit_suppressions_db
+            if suppression.get('suppression_id') == f'fedramp-strict-{strict_value}'
+        ]
+        assert _models.compliance_logs_db[f'fedramp-strict-log-{strict_value}']['decision'] == 'deny'
+
+    @pytest.mark.parametrize('strict_value', [False, 0, 'false'])
+    def test_audit_suspend_strict_mode_negative_encodings_allow(self, client, strict_value):
+        """Test explicit negative strict-mode values use the vulnerable path."""
+        import app.models as _models
+
+        response = client.post(
+            '/api/v1/admin/audit/suspend',
+            json={
+                'strict_mode': strict_value,
+                'suppression_id': f'fedramp-strict-negative-{strict_value}',
+                'log_id': f'fedramp-strict-negative-log-{strict_value}'
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['status'] == 'auditing_suspended'
+        assert data['audit_logged'] is False
+        assert _models.compliance_logs_db[f'fedramp-strict-negative-log-{strict_value}']['decision'] == 'allow'
+
+    def test_audit_suspend_empty_string_ids_fall_back_to_defaults(self, client):
+        """Test empty-string identifiers cannot create blank FedRAMP evidence records."""
+        import app.models as _models
+
+        response = client.post(
+            '/api/v1/admin/audit/suspend',
+            json={'actor': '', 'suppression_id': '', 'log_id': ''}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['suppression_id'] == 'fedramp-audit-suppression-endpoint'
+        assert data['log_id'] == 'fedramp-audit-suspend-endpoint'
+        assert '' not in _models.compliance_logs_db
+        assert _models.compliance_logs_db['fedramp-audit-suspend-endpoint']['actor'] == 'fedramp-admin'
+
+    def test_audit_suspend_stores_invalid_payload_field_types(self, client):
+        """Test vulnerable audit suspension stores mismatched field types as supplied."""
+        import app.models as _models
+
+        response = client.post(
+            '/api/v1/admin/audit/suspend',
+            json={
+                'duration_minutes': '15',
+                'reason': 123,
+                'suppression_id': 'fedramp-invalid-types',
+                'log_id': 'fedramp-invalid-types-log'
+            }
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data['duration'] == '15'
+        assert data['reason'] == 123
+        assert _models.compliance_logs_db['fedramp-invalid-types-log']['duration_minutes'] == '15'
+        assert _models.compliance_logs_db['fedramp-invalid-types-log']['reason'] == 123
+
+    def test_audit_suspend_deduplicates_suppression_id(self, client):
+        """Test repeated suppression IDs replace the previous active suppression."""
+        import app.models as _models
+
+        for reason in ['first reason', 'second reason']:
+            response = client.post(
+                '/api/v1/admin/audit/suspend',
+                json={
+                    'suppression_id': 'fedramp-repeat-suppression',
+                    'log_id': 'fedramp-repeat-log',
+                    'reason': reason
+                }
+            )
+            assert response.status_code == 200
+
+        matching = [
+            suppression for suppression in _models.audit_suppressions_db
+            if suppression.get('suppression_id') == 'fedramp-repeat-suppression'
+        ]
+        assert len(matching) == 1
+        assert matching[0]['reason'] == 'second reason'
+        assert _models.compliance_logs_db['fedramp-repeat-log']['reason'] == 'second reason'
+
+    def test_audit_suspend_concurrent_requests_keep_unique_suppressions(self, client):
+        """Test concurrent audit suppression writes keep all endpoint records."""
+        import app.models as _models
+
+        def suspend(index):
+            return client.post(
+                '/api/v1/admin/audit/suspend',
+                json={
+                    'suppression_id': f'fedramp-concurrent-{index}',
+                    'log_id': f'fedramp-concurrent-log-{index}',
+                    'reason': f'concurrent {index}'
+                }
+            ).status_code
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            statuses = list(executor.map(suspend, range(4)))
+
+        assert statuses == [200, 200, 200, 200]
+        matching_ids = {
+            suppression['suppression_id']
+            for suppression in _models.audit_suppressions_db
+            if suppression.get('suppression_id', '').startswith('fedramp-concurrent-')
+        }
+        assert matching_ids == {f'fedramp-concurrent-{index}' for index in range(4)}
+
+    def test_audit_suspend_concurrent_duplicate_id_keeps_single_suppression(self, client):
+        """Test concurrent duplicate suppression writes collapse to one active record."""
+        import app.models as _models
+
+        def suspend(index):
+            return client.post(
+                '/api/v1/admin/audit/suspend',
+                json={
+                    'suppression_id': 'fedramp-concurrent-duplicate',
+                    'log_id': 'fedramp-concurrent-duplicate-log',
+                    'reason': f'duplicate {index}'
+                }
+            ).status_code
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            statuses = list(executor.map(suspend, range(4)))
+
+        assert statuses == [200, 200, 200, 200]
+        matching = [
+            suppression for suppression in _models.audit_suppressions_db
+            if suppression.get('suppression_id') == 'fedramp-concurrent-duplicate'
+        ]
+        assert len(matching) == 1
+        assert matching[0]['reason'] in {f'duplicate {index}' for index in range(4)}
+        assert _models.compliance_logs_db['fedramp-concurrent-duplicate-log']['reason'] in {
+            f'duplicate {index}' for index in range(4)
+        }
 
     def test_get_config_no_auth(self, client):
         """Test system configuration exposed without authorization."""

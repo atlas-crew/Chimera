@@ -244,6 +244,13 @@ Industrial control system and operational technology endpoints.
 
 Blue team tools and defensive operations.
 
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/defense/metrics` | Defensive metrics; use `?fedramp=true` for deterministic RA/SI evidence and `strict_mode=true` for comparison output |
+| GET | `/api/security/monitoring/bypass` | Security monitoring bypass strategies |
+| POST | `/api/incidents/create` | Create incident record |
+| GET | `/api/threats/indicators` | Threat intelligence indicators |
+
 ## GenAI (4 routes)
 
 | Method | Path | Description |
