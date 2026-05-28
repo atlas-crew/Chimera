@@ -6,12 +6,339 @@ from datetime import datetime
 from app.models import *
 from app.models import data_stores as _data_stores
 
+FEDRAMP_TENANT_A_ID = 'fedramp-tenant-a'
+FEDRAMP_TENANT_B_ID = 'fedramp-tenant-b'
+FEDRAMP_PROJECT_A_ID = 'fedramp-proj-a-001'
+FEDRAMP_PROJECT_B_ID = 'fedramp-proj-b-001'
+FEDRAMP_ACCOUNT_A_ID = 'ACC-FEDRAMP-A-001'
+FEDRAMP_ACCOUNT_B_ID = 'ACC-FEDRAMP-B-001'
+FEDRAMP_HEALTH_RECORD_A_ID = 'REC-FEDRAMP-A-001'
+FEDRAMP_HEALTH_RECORD_B_ID = 'REC-FEDRAMP-B-001'
+FEDRAMP_ORDER_A_ID = 'ORDER-FEDRAMP-A-001'
+FEDRAMP_ORDER_B_ID = 'ORDER-FEDRAMP-B-001'
+FEDRAMP_AUTHORIZATION_ID = 'AUTH-FEDRAMP-001'
+FEDRAMP_CUSTOMER_A_ID = 'CUST-FEDRAMP-A'
+FEDRAMP_CUSTOMER_B_ID = 'CUST-FEDRAMP-B'
+FEDRAMP_FIXTURE_TIMESTAMP = '2026-05-01T00:00:00'
+
+FEDRAMP_DEMO_USERS = {
+    'admin': {
+        'user_id': 'fedramp-admin',
+        'username': 'fedramp.admin',
+        'email': 'fedramp.admin@agency.example',
+        'password': 'fedramp-demo-admin',
+        'role': 'admin',
+        'tenant_id': FEDRAMP_TENANT_A_ID,
+    },
+    'operator_a': {
+        'user_id': 'fedramp-operator-a',
+        'username': 'fedramp.operator.a',
+        'email': 'fedramp.operator.a@agency.example',
+        'password': 'fedramp-demo-operator-a',
+        'role': 'operator',
+        'tenant_id': FEDRAMP_TENANT_A_ID,
+    },
+    'auditor': {
+        'user_id': 'fedramp-auditor',
+        'username': 'fedramp.auditor',
+        'email': 'fedramp.auditor@agency.example',
+        'password': 'fedramp-demo-auditor',
+        'role': 'auditor',
+        'tenant_id': FEDRAMP_TENANT_A_ID,
+    },
+    'user_a': {
+        'user_id': 'fedramp-user-a',
+        'username': 'fedramp.user.a',
+        'email': 'fedramp.user.a@agency.example',
+        'password': 'fedramp-demo-user-a',
+        'role': 'member',
+        'tenant_id': FEDRAMP_TENANT_A_ID,
+    },
+    'user_b': {
+        'user_id': 'fedramp-user-b',
+        'username': 'fedramp.user.b',
+        'email': 'fedramp.user.b@agency.example',
+        'password': 'fedramp-demo-user-b',
+        'role': 'member',
+        'tenant_id': FEDRAMP_TENANT_B_ID,
+    },
+}
+
 
 def _add_user_record(user_id: str, user: dict) -> None:
     if users_db is _data_stores.users_db:
         add_user(user_id, user)
     else:
         users_db[user_id] = user
+
+
+def _add_saas_user_record(user_id: str, user: dict) -> None:
+    if saas_users_db is _data_stores.saas_users_db:
+        add_saas_user(user_id, user)
+    else:
+        saas_users_db[user_id] = user
+
+
+def seed_fedramp_demo_fixtures() -> dict:
+    """Seed deterministic resources used by FedRAMP scenario tests."""
+    now = FEDRAMP_FIXTURE_TIMESTAMP
+
+    for user in FEDRAMP_DEMO_USERS.values():
+        _add_user_record(user['user_id'], {
+            'id': user['user_id'],
+            'user_id': user['user_id'],
+            'username': user['username'],
+            'email': user['email'],
+            'password': user['password'],
+            'role': user['role'],
+            'tenant_id': user['tenant_id'],
+            'fedramp_fixture': True,
+            'created': now,
+        })
+
+    saas_tenants_db.update({
+        FEDRAMP_TENANT_A_ID: {
+            'tenant_id': FEDRAMP_TENANT_A_ID,
+            'name': 'FedRAMP Tenant A',
+            'plan': 'govcloud',
+            'owner_id': FEDRAMP_DEMO_USERS['admin']['user_id'],
+            'data_region': 'us-gov-west-1',
+            'seat_count': 25,
+            'created_at': now,
+            'fedramp_fixture': True,
+        },
+        FEDRAMP_TENANT_B_ID: {
+            'tenant_id': FEDRAMP_TENANT_B_ID,
+            'name': 'FedRAMP Tenant B',
+            'plan': 'govcloud',
+            'owner_id': FEDRAMP_DEMO_USERS['user_b']['user_id'],
+            'data_region': 'us-gov-east-1',
+            'seat_count': 12,
+            'created_at': now,
+            'fedramp_fixture': True,
+        },
+    })
+    saas_projects_db.update({
+        FEDRAMP_TENANT_A_ID: [{
+            'project_id': FEDRAMP_PROJECT_A_ID,
+            'tenant_id': FEDRAMP_TENANT_A_ID,
+            'name': 'FedRAMP Boundary Review',
+            'status': 'active',
+            'last_updated': now,
+            'fedramp_fixture': True,
+        }],
+        FEDRAMP_TENANT_B_ID: [{
+            'project_id': FEDRAMP_PROJECT_B_ID,
+            'tenant_id': FEDRAMP_TENANT_B_ID,
+            'name': 'FedRAMP Incident Evidence',
+            'status': 'active',
+            'last_updated': now,
+            'fedramp_fixture': True,
+        }],
+    })
+    for user in FEDRAMP_DEMO_USERS.values():
+        _add_saas_user_record(user['user_id'], {
+            'user_id': user['user_id'],
+            'email': user['email'],
+            'role': user['role'],
+            'tenant_id': user['tenant_id'],
+            'fedramp_fixture': True,
+        })
+
+    accounts_db.update({
+        FEDRAMP_ACCOUNT_A_ID: {
+            'account_id': FEDRAMP_ACCOUNT_A_ID,
+            'user_id': FEDRAMP_DEMO_USERS['user_a']['user_id'],
+            'tenant_id': FEDRAMP_TENANT_A_ID,
+            'account_type': 'checking',
+            'balance': 4200.00,
+            'currency': 'USD',
+            'status': 'active',
+            'created_at': now,
+            'fedramp_fixture': True,
+        },
+        FEDRAMP_ACCOUNT_B_ID: {
+            'account_id': FEDRAMP_ACCOUNT_B_ID,
+            'user_id': FEDRAMP_DEMO_USERS['user_b']['user_id'],
+            'tenant_id': FEDRAMP_TENANT_B_ID,
+            'account_type': 'treasury',
+            'balance': 9800.00,
+            'currency': 'USD',
+            'status': 'active',
+            'created_at': now,
+            'fedramp_fixture': True,
+        },
+    })
+
+    medical_records_db.update({
+        FEDRAMP_HEALTH_RECORD_A_ID: {
+            'record_id': FEDRAMP_HEALTH_RECORD_A_ID,
+            'patient_id': FEDRAMP_DEMO_USERS['user_a']['user_id'],
+            'tenant_id': FEDRAMP_TENANT_A_ID,
+            'patient_name': 'FedRAMP Patient A',
+            'ssn': '***-**-3001',
+            'dob': '1988-03-01',
+            'diagnosis': 'Continuity review',
+            'medications': ['Demo Medication A'],
+            'last_visit': '2026-05-01',
+            'provider_id': 'PROV-FEDRAMP-A',
+            'fedramp_fixture': True,
+        },
+        FEDRAMP_HEALTH_RECORD_B_ID: {
+            'record_id': FEDRAMP_HEALTH_RECORD_B_ID,
+            'patient_id': FEDRAMP_DEMO_USERS['user_b']['user_id'],
+            'tenant_id': FEDRAMP_TENANT_B_ID,
+            'patient_name': 'FedRAMP Patient B',
+            'ssn': '***-**-3002',
+            'dob': '1990-04-02',
+            'diagnosis': 'Incident response follow-up',
+            'medications': ['Demo Medication B'],
+            'last_visit': '2026-05-02',
+            'provider_id': 'PROV-FEDRAMP-B',
+            'fedramp_fixture': True,
+        },
+    })
+
+    orders_db.update({
+        FEDRAMP_ORDER_A_ID: {
+            'order_id': FEDRAMP_ORDER_A_ID,
+            'tenant_id': FEDRAMP_TENANT_A_ID,
+            'customer_id': FEDRAMP_CUSTOMER_A_ID,
+            'status': 'processing',
+            'total': 149.99,
+            'items': [{'sku': 'FEDRAMP-SCAN', 'quantity': 1}],
+            'override_history': [],
+            'fedramp_fixture': True,
+        },
+        FEDRAMP_ORDER_B_ID: {
+            'order_id': FEDRAMP_ORDER_B_ID,
+            'tenant_id': FEDRAMP_TENANT_B_ID,
+            'customer_id': FEDRAMP_CUSTOMER_B_ID,
+            'status': 'held',
+            'total': 249.99,
+            'items': [{'sku': 'FEDRAMP-EVIDENCE', 'quantity': 1}],
+            'override_history': [],
+            'fedramp_fixture': True,
+        },
+    })
+
+    customer_payment_methods_db.update({
+        FEDRAMP_CUSTOMER_A_ID: [{
+            'method_id': 'PM-FEDRAMP-A-001',
+            'customer_id': FEDRAMP_CUSTOMER_A_ID,
+            'tenant_id': FEDRAMP_TENANT_A_ID,
+            'type': 'card',
+            'card_brand': 'VISA',
+            'last_four': '3001',
+            'is_default': True,
+            'fedramp_fixture': True,
+        }],
+        FEDRAMP_CUSTOMER_B_ID: [{
+            'method_id': 'PM-FEDRAMP-B-001',
+            'customer_id': FEDRAMP_CUSTOMER_B_ID,
+            'tenant_id': FEDRAMP_TENANT_B_ID,
+            'type': 'card',
+            'card_brand': 'MASTERCARD',
+            'last_four': '3002',
+            'is_default': True,
+            'fedramp_fixture': True,
+        }],
+    })
+    payment_methods_db.setdefault('authorizations', {})[FEDRAMP_AUTHORIZATION_ID] = {
+        'authorization_code': FEDRAMP_AUTHORIZATION_ID,
+        'card_number': '****-****-****-3001',
+        'amount': 100.00,
+        'merchant_id': 'MERCH-FEDRAMP-DEMO',
+        'status': 'authorized',
+        'authorized_at': now,
+        'expires_at': None,
+        'customer_id': FEDRAMP_CUSTOMER_A_ID,
+        'fedramp_fixture': True,
+    }
+    payment_test_events[:] = [event for event in payment_test_events if not event.get('fedramp_fixture')]
+    payment_test_events.append({
+        'event_id': 'PAY-FEDRAMP-AUTH-001',
+        'authorization_code': FEDRAMP_AUTHORIZATION_ID,
+        'tenant_id': FEDRAMP_TENANT_A_ID,
+        'event': 'authorization_created',
+        'created_at': now,
+        'fedramp_fixture': True,
+    })
+
+    fedramp_audit_logs = [
+        {
+            'log_id': 'fedramp-audit-allow-001',
+            'event': 'tenant_project_read',
+            'actor': FEDRAMP_DEMO_USERS['operator_a']['user_id'],
+            'tenant_id': FEDRAMP_TENANT_A_ID,
+            'resource_id': FEDRAMP_PROJECT_A_ID,
+            'decision': 'allow',
+            'timestamp': now,
+            'fedramp_fixture': True,
+        },
+        {
+            'log_id': 'fedramp-audit-deny-001',
+            'event': 'tenant_project_read',
+            'actor': FEDRAMP_DEMO_USERS['user_a']['user_id'],
+            'tenant_id': FEDRAMP_TENANT_B_ID,
+            'resource_id': FEDRAMP_PROJECT_B_ID,
+            'decision': 'deny',
+            'timestamp': now,
+            'fedramp_fixture': True,
+        },
+    ]
+    saas_audit_logs_db[:] = [log for log in saas_audit_logs_db if not log.get('fedramp_fixture')]
+    saas_audit_logs_db.extend(fedramp_audit_logs)
+    compliance_logs_db.update({
+        log['log_id']: {
+            **log,
+            'framework': 'fedramp',
+            'controls': ['AC-3', 'AC-4', 'AC-6', 'AU-2'],
+        }
+        for log in fedramp_audit_logs
+    })
+
+    audit_suppressions_db[:] = [
+        suppression for suppression in audit_suppressions_db if not suppression.get('fedramp_fixture')
+    ]
+    audit_suppressions_db.append({
+        'suppression_id': 'fedramp-audit-suppression-001',
+        'actor': FEDRAMP_DEMO_USERS['admin']['user_id'],
+        'target_log_id': 'fedramp-audit-deny-001',
+        'reason': 'demo audit suppression fixture',
+        'created_at': now,
+        'fedramp_fixture': True,
+    })
+
+    return get_fedramp_demo_fixtures()
+
+
+def get_fedramp_demo_fixtures() -> dict:
+    """Return stable FedRAMP demo IDs and demo-only credentials."""
+    return {
+        'note': 'Demo-only credentials for local scenario automation; not real secrets.',
+        'tenants': {
+            'tenant_a': FEDRAMP_TENANT_A_ID,
+            'tenant_b': FEDRAMP_TENANT_B_ID,
+        },
+        'users': {role: dict(user) for role, user in FEDRAMP_DEMO_USERS.items()},
+        'resources': {
+            'tenant_a_project': FEDRAMP_PROJECT_A_ID,
+            'tenant_b_project': FEDRAMP_PROJECT_B_ID,
+            'tenant_a_account': FEDRAMP_ACCOUNT_A_ID,
+            'tenant_b_account': FEDRAMP_ACCOUNT_B_ID,
+            'tenant_a_health_record': FEDRAMP_HEALTH_RECORD_A_ID,
+            'tenant_b_health_record': FEDRAMP_HEALTH_RECORD_B_ID,
+            'tenant_a_order': FEDRAMP_ORDER_A_ID,
+            'tenant_b_order': FEDRAMP_ORDER_B_ID,
+            'tenant_a_customer': FEDRAMP_CUSTOMER_A_ID,
+            'tenant_b_customer': FEDRAMP_CUSTOMER_B_ID,
+            'payment_authorization': FEDRAMP_AUTHORIZATION_ID,
+            'audit_allow_log': 'fedramp-audit-allow-001',
+            'audit_deny_log': 'fedramp-audit-deny-001',
+            'audit_suppression': 'fedramp-audit-suppression-001',
+        },
+    }
 
 
 def init_demo_data():
@@ -26,7 +353,7 @@ def init_demo_data():
     global cloud_service_registry, apt_operations_log, underwriting_rules_db
     global actuarial_models_db, orders_db, payment_methods_db, tax_calculations_db
     global promotions_db, discounts_db, shipping_addresses_db, fraudulent_methods_db
-    global transaction_exports_db, currency_rates_db, audit_suppressions_db
+    global transaction_exports_db, currency_rates_db, compliance_logs_db, audit_suppressions_db
     global saas_tenants_db, saas_projects_db, saas_users_db, saas_shared_links_db
     global saas_billing_invoices_db, saas_billing_usage_db, saas_workspace_settings_db
     global saas_coupons_db, saas_refresh_tokens_db, saas_audit_logs_db
@@ -765,6 +1092,8 @@ def init_demo_data():
             'approved_at': datetime.now().isoformat()
         }
     })
+
+    seed_fedramp_demo_fixtures()
 
 
 def reset_demo_data():

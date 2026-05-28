@@ -177,6 +177,37 @@ tasks should add the annotations directly to `apps/vuln-api/docs/openapi.yaml`.
 | audit | `POST` | `/api/v1/admin/audit/suspend` | `audit-suppression` | `AU-2`, `AU-6`, `AU-9`, `AC-6`, `CM-5` | `request-response`, `audit-log`, `config-state` |
 | integrations | `POST` | `/api/v1/integrations/ws/simulate-frame` | `service-trust-abuse` | `SC-7`, `SC-8`, `AC-4`, `SI-10` | `request-response`, `runner-artifact`, `openapi-operation` |
 
+## Deterministic FedRAMP Demo Fixtures
+
+`app.utils.demo_data.init_demo_data()` seeds the following deterministic fixture
+IDs for Crucible scenario authors. Credentials are demo-only local values for
+automation and are not real secrets.
+
+| Fixture | Stable ID or value | Notes |
+| --- | --- | --- |
+| Tenant A | `fedramp-tenant-a` | Primary tenant for authorized user, operator, admin, and auditor scenarios. |
+| Tenant B | `fedramp-tenant-b` | Cross-tenant target for IDOR and boundary-control scenarios. |
+| Admin user | `fedramp-admin` / `fedramp-demo-admin` | Tenant A admin. |
+| Operator user | `fedramp-operator-a` / `fedramp-demo-operator-a` | Tenant A operator. |
+| Auditor user | `fedramp-auditor` / `fedramp-demo-auditor` | Tenant A auditor. |
+| Tenant A member | `fedramp-user-a` / `fedramp-demo-user-a` | Baseline user for authorized Tenant A flows. |
+| Tenant B member | `fedramp-user-b` / `fedramp-demo-user-b` | Target user for cross-tenant checks. |
+| Tenant A project | `fedramp-proj-a-001` | Returned by `/api/v1/saas/tenants/fedramp-tenant-a/projects`. |
+| Tenant B project | `fedramp-proj-b-001` | Returned by `/api/v1/saas/tenants/fedramp-tenant-b/projects`. |
+| Tenant A banking account | `ACC-FEDRAMP-A-001` | Owned by `fedramp-user-a`. |
+| Tenant B banking account | `ACC-FEDRAMP-B-001` | Owned by `fedramp-user-b`; useful for BOLA contrast tests. |
+| Tenant A healthcare record | `REC-FEDRAMP-A-001` | Seeded PHI-style record for Tenant A. |
+| Tenant B healthcare record | `REC-FEDRAMP-B-001` | Seeded PHI-style record for Tenant B. |
+| Tenant A ecommerce order | `ORDER-FEDRAMP-A-001` | Seeded order for business-logic scenarios. |
+| Tenant B ecommerce order | `ORDER-FEDRAMP-B-001` | Cross-tenant order target. |
+| Payment authorization | `AUTH-FEDRAMP-001` | Authorized for `100.00`, intentionally capturable for higher amounts. |
+| Audit allow log | `fedramp-audit-allow-001` | Tenant A authorization decision fixture. |
+| Audit deny log | `fedramp-audit-deny-001` | Cross-tenant denial evidence fixture. |
+| Audit suppression | `fedramp-audit-suppression-001` | Audit-suppression evidence fixture. |
+
+Code consumers can call `get_fedramp_demo_fixtures()` for the same IDs instead of
+duplicating string constants.
+
 ## Crucible Scenario References
 
 Crucible scenarios should reference Chimera annotations by method, OpenAPI path,

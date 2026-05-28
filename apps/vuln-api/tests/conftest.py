@@ -21,6 +21,7 @@ from app.models import (
     accounts_db, transactions_db, password_reset_requests,
     refresh_tokens_db, mfa_challenges_db, registered_devices_db,
     api_keys_db, customers_db, policies_db, claims_evidence_db,
+    compliance_logs_db,
     underwriting_rules_db, actuarial_models_db,
     saas_tenants_db, saas_projects_db, saas_users_db, saas_shared_links_db,
     saas_users_by_tenant,
@@ -169,6 +170,7 @@ def reset_databases():
     customers_db.clear()
     policies_db.clear()
     claims_evidence_db.clear()
+    compliance_logs_db.clear()
     underwriting_rules_db.clear()
     actuarial_models_db.clear()
     saas_tenants_db.clear()
@@ -257,6 +259,7 @@ def reset_databases():
     customers_db.clear()
     policies_db.clear()
     claims_evidence_db.clear()
+    compliance_logs_db.clear()
     underwriting_rules_db.clear()
     actuarial_models_db.clear()
     saas_tenants_db.clear()

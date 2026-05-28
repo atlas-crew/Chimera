@@ -15,6 +15,8 @@ from datetime import datetime
 from app.utils.demo_data import (
     init_demo_data,
     reset_demo_data,
+    seed_fedramp_demo_fixtures,
+    get_fedramp_demo_fixtures,
     get_demo_user,
     get_demo_customer,
     seed_additional_users,
@@ -25,6 +27,7 @@ from app.utils.demo_data import (
     export_demo_data,
     import_demo_data
 )
+from app.utils.security_config import security_config
 
 
 class TestInitDemoData:
@@ -64,6 +67,239 @@ class TestInitDemoData:
 
         assert len(products_db) >= 3
         assert 'PROD-001' in products_db
+
+
+class TestFedRampDemoFixtures:
+    """Test deterministic FedRAMP fixtures for scenario authors."""
+
+    def test_init_demo_data_creates_fedramp_fixture_set(self):
+        """Test FedRAMP fixtures are seeded across tenant and resource stores."""
+        import app.models as _models
+
+        init_demo_data()
+        assert 'fedramp-tenant-a' in _models.saas_tenants_db
+        assert 'fedramp-tenant-b' in _models.saas_tenants_db
+        assert _models.saas_tenants_db['fedramp-tenant-a']['plan'] == 'govcloud'
+        assert _models.saas_tenants_db['fedramp-tenant-a']['owner_id'] == 'fedramp-admin'
+        assert _models.saas_tenants_db['fedramp-tenant-b']['data_region'] == 'us-gov-east-1'
+
+        assert _models.saas_projects_db['fedramp-tenant-a'][0]['project_id'] == 'fedramp-proj-a-001'
+        assert _models.saas_projects_db['fedramp-tenant-b'][0]['project_id'] == 'fedramp-proj-b-001'
+        assert _models.accounts_db['ACC-FEDRAMP-A-001']['user_id'] == 'fedramp-user-a'
+        assert _models.accounts_db['ACC-FEDRAMP-B-001']['user_id'] == 'fedramp-user-b'
+        assert _models.medical_records_db['REC-FEDRAMP-A-001']['patient_id'] == 'fedramp-user-a'
+        assert _models.medical_records_db['REC-FEDRAMP-B-001']['patient_id'] == 'fedramp-user-b'
+        assert _models.orders_db['ORDER-FEDRAMP-A-001']['customer_id'] == 'CUST-FEDRAMP-A'
+        assert _models.orders_db['ORDER-FEDRAMP-B-001']['customer_id'] == 'CUST-FEDRAMP-B'
+        assert _models.customer_payment_methods_db['CUST-FEDRAMP-A'][0]['method_id'] == 'PM-FEDRAMP-A-001'
+        assert _models.customer_payment_methods_db['CUST-FEDRAMP-B'][0]['method_id'] == 'PM-FEDRAMP-B-001'
+        assert _models.payment_methods_db['authorizations']['AUTH-FEDRAMP-001']['amount'] == 100.00
+
+        compliance_log = _models.compliance_logs_db['fedramp-audit-deny-001']
+        assert compliance_log['framework'] == 'fedramp'
+        assert compliance_log['controls'] == ['AC-3', 'AC-4', 'AC-6', 'AU-2']
+        assert compliance_log['decision'] == 'deny'
+
+        expected_users = {
+            'fedramp-admin': ('admin', 'fedramp-tenant-a', 'fedramp.admin@agency.example'),
+            'fedramp-operator-a': ('operator', 'fedramp-tenant-a', 'fedramp.operator.a@agency.example'),
+            'fedramp-auditor': ('auditor', 'fedramp-tenant-a', 'fedramp.auditor@agency.example'),
+            'fedramp-user-a': ('member', 'fedramp-tenant-a', 'fedramp.user.a@agency.example'),
+            'fedramp-user-b': ('member', 'fedramp-tenant-b', 'fedramp.user.b@agency.example'),
+        }
+        for user_id, (role, tenant_id, email) in expected_users.items():
+            assert user_id in _models.users_db
+            assert user_id in _models.saas_users_db
+            assert _models.users_db[user_id]['password'].startswith('fedramp-demo-')
+            assert _models.users_db[user_id]['role'] == role
+            assert _models.users_db[user_id]['tenant_id'] == tenant_id
+            assert _models.users_db[user_id]['email'] == email
+            assert _models.saas_users_db[user_id]['role'] == role
+            assert _models.saas_users_db[user_id]['tenant_id'] == tenant_id
+
+        assert set(_models.saas_users_by_tenant['fedramp-tenant-a']) >= {
+            'fedramp-admin',
+            'fedramp-operator-a',
+            'fedramp-auditor',
+            'fedramp-user-a',
+        }
+        assert _models.saas_users_by_tenant['fedramp-tenant-b'] == ['fedramp-user-b']
+
+    def test_get_fedramp_demo_fixtures_returns_stable_contract(self):
+        """Test published FedRAMP fixture IDs and credentials stay stable."""
+        assert get_fedramp_demo_fixtures() == {
+            'note': 'Demo-only credentials for local scenario automation; not real secrets.',
+            'tenants': {
+                'tenant_a': 'fedramp-tenant-a',
+                'tenant_b': 'fedramp-tenant-b',
+            },
+            'users': {
+                'admin': {
+                    'user_id': 'fedramp-admin',
+                    'username': 'fedramp.admin',
+                    'email': 'fedramp.admin@agency.example',
+                    'password': 'fedramp-demo-admin',
+                    'role': 'admin',
+                    'tenant_id': 'fedramp-tenant-a',
+                },
+                'operator_a': {
+                    'user_id': 'fedramp-operator-a',
+                    'username': 'fedramp.operator.a',
+                    'email': 'fedramp.operator.a@agency.example',
+                    'password': 'fedramp-demo-operator-a',
+                    'role': 'operator',
+                    'tenant_id': 'fedramp-tenant-a',
+                },
+                'auditor': {
+                    'user_id': 'fedramp-auditor',
+                    'username': 'fedramp.auditor',
+                    'email': 'fedramp.auditor@agency.example',
+                    'password': 'fedramp-demo-auditor',
+                    'role': 'auditor',
+                    'tenant_id': 'fedramp-tenant-a',
+                },
+                'user_a': {
+                    'user_id': 'fedramp-user-a',
+                    'username': 'fedramp.user.a',
+                    'email': 'fedramp.user.a@agency.example',
+                    'password': 'fedramp-demo-user-a',
+                    'role': 'member',
+                    'tenant_id': 'fedramp-tenant-a',
+                },
+                'user_b': {
+                    'user_id': 'fedramp-user-b',
+                    'username': 'fedramp.user.b',
+                    'email': 'fedramp.user.b@agency.example',
+                    'password': 'fedramp-demo-user-b',
+                    'role': 'member',
+                    'tenant_id': 'fedramp-tenant-b',
+                },
+            },
+            'resources': {
+                'tenant_a_project': 'fedramp-proj-a-001',
+                'tenant_b_project': 'fedramp-proj-b-001',
+                'tenant_a_account': 'ACC-FEDRAMP-A-001',
+                'tenant_b_account': 'ACC-FEDRAMP-B-001',
+                'tenant_a_health_record': 'REC-FEDRAMP-A-001',
+                'tenant_b_health_record': 'REC-FEDRAMP-B-001',
+                'tenant_a_order': 'ORDER-FEDRAMP-A-001',
+                'tenant_b_order': 'ORDER-FEDRAMP-B-001',
+                'tenant_a_customer': 'CUST-FEDRAMP-A',
+                'tenant_b_customer': 'CUST-FEDRAMP-B',
+                'payment_authorization': 'AUTH-FEDRAMP-001',
+                'audit_allow_log': 'fedramp-audit-allow-001',
+                'audit_deny_log': 'fedramp-audit-deny-001',
+                'audit_suppression': 'fedramp-audit-suppression-001',
+            },
+        }
+
+    def test_reset_demo_data_restores_fedramp_fixture_ids(self):
+        """Test reset recreates deleted FedRAMP fixture IDs deterministically."""
+        import app.models as _models
+
+        init_demo_data()
+        fixtures = get_fedramp_demo_fixtures()
+        resources = fixtures['resources']
+
+        _models.saas_tenants_db.pop(fixtures['tenants']['tenant_a'])
+        _models.accounts_db.pop(resources['tenant_b_account'])
+        _models.payment_methods_db['authorizations'].pop(resources['payment_authorization'])
+
+        reset_demo_data()
+
+        assert fixtures['tenants']['tenant_a'] in _models.saas_tenants_db
+        assert resources['tenant_b_account'] in _models.accounts_db
+        assert resources['payment_authorization'] in _models.payment_methods_db['authorizations']
+
+    def test_fedramp_fixture_seeder_is_idempotent(self):
+        """Test direct fixture seeding does not duplicate list-backed fixtures."""
+        import app.models as _models
+
+        init_demo_data()
+        assert seed_fedramp_demo_fixtures() == get_fedramp_demo_fixtures()
+        seed_fedramp_demo_fixtures()
+        seed_fedramp_demo_fixtures()
+
+        fedramp_events = [event for event in _models.payment_test_events if event.get('fedramp_fixture')]
+        fedramp_audit_logs = [log for log in _models.saas_audit_logs_db if log.get('fedramp_fixture')]
+        fedramp_suppressions = [
+            suppression for suppression in _models.audit_suppressions_db if suppression.get('fedramp_fixture')
+        ]
+
+        assert [event['event_id'] for event in fedramp_events] == ['PAY-FEDRAMP-AUTH-001']
+        assert {log['log_id'] for log in fedramp_audit_logs} == {
+            'fedramp-audit-allow-001',
+            'fedramp-audit-deny-001',
+        }
+        assert [suppression['suppression_id'] for suppression in fedramp_suppressions] == [
+            'fedramp-audit-suppression-001',
+        ]
+
+    def test_fedramp_fixture_seeder_supports_patched_saas_user_store(self):
+        """Test direct SaaS user insertion when tests patch the module store."""
+        import app.utils.demo_data as demo_data
+
+        with patch('app.utils.demo_data.saas_users_db', {}), patch('app.utils.demo_data.add_saas_user') as add_user:
+            demo_data.seed_fedramp_demo_fixtures()
+
+            assert 'fedramp-admin' in demo_data.saas_users_db
+            assert 'fedramp-user-b' in demo_data.saas_users_db
+            assert demo_data.saas_users_db['fedramp-user-b']['tenant_id'] == 'fedramp-tenant-b'
+            add_user.assert_not_called()
+
+    def test_fedramp_cross_tenant_resources_stay_separate_in_stores(self):
+        """Test normal fixture state keeps tenant A and tenant B ownership separate."""
+        import app.models as _models
+
+        init_demo_data()
+        fixtures = get_fedramp_demo_fixtures()
+        tenant_a = fixtures['tenants']['tenant_a']
+        tenant_b = fixtures['tenants']['tenant_b']
+        resources = fixtures['resources']
+
+        assert _models.accounts_db[resources['tenant_a_account']]['tenant_id'] == tenant_a
+        assert _models.accounts_db[resources['tenant_b_account']]['tenant_id'] == tenant_b
+        assert _models.medical_records_db[resources['tenant_a_health_record']]['tenant_id'] == tenant_a
+        assert _models.medical_records_db[resources['tenant_b_health_record']]['tenant_id'] == tenant_b
+        assert _models.orders_db[resources['tenant_a_order']]['tenant_id'] == tenant_a
+        assert _models.orders_db[resources['tenant_b_order']]['tenant_id'] == tenant_b
+
+    def test_fedramp_tenant_projects_are_accessible_via_vulnerable_flow(self, client, set_session):
+        """Test the vulnerable SaaS tenant route exposes another tenant's fixture."""
+        init_demo_data()
+        fixtures = get_fedramp_demo_fixtures()
+        set_session(client, {'user_id': fixtures['users']['user_a']['user_id']})
+
+        response = client.get(f"/api/v1/saas/tenants/{fixtures['tenants']['tenant_b']}/projects")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body['tenant_id'] == fixtures['tenants']['tenant_b']
+        assert body['projects'][0]['project_id'] == fixtures['resources']['tenant_b_project']
+
+    def test_fedramp_banking_fixture_compares_vulnerable_and_secure_modes(self, client, set_session):
+        """Test account fixture supports vulnerable access and secure-mode denial."""
+        init_demo_data()
+        fixtures = get_fedramp_demo_fixtures()
+        original_config = security_config.to_dict().copy()
+        set_session(client, {'user_id': fixtures['users']['user_a']['user_id']})
+
+        try:
+            security_config.update({'bola_protection': False})
+            vulnerable_response = client.get(
+                f"/api/v1/banking/accounts/{fixtures['resources']['tenant_b_account']}"
+            )
+            assert vulnerable_response.status_code == 200
+            vulnerable_body = vulnerable_response.json()
+            assert vulnerable_body['account_id'] == fixtures['resources']['tenant_b_account']
+            assert vulnerable_body['vulnerability'] == 'BOLA_IDOR_DETECTED'
+
+            security_config.update({'bola_protection': True})
+            secure_response = client.get(f"/api/v1/banking/accounts/{fixtures['resources']['tenant_b_account']}")
+            assert secure_response.status_code == 403
+            assert secure_response.json()['vulnerability'] == 'BOLA_IDOR_BLOCKED'
+        finally:
+            security_config.update(original_config)
 
 
 class TestResetDemoData:
