@@ -65,7 +65,10 @@ def test_initial_fedramp_slice_operations_are_machine_annotated():
         assert operation["x-vulnerability-class"]
         assert operation["x-expected-defense"]["mode"] in {"strict", "external"}
         assert operation["x-expected-defense"]["behavior"]
-        assert set(operation["x-expected-defense"].get("requiredSignals", [])) <= ALLOWED_REQUIRED_SIGNALS
+        assert (
+            set(operation["x-expected-defense"].get("requiredSignals", []))
+            <= ALLOWED_REQUIRED_SIGNALS
+        )
         assert operation["x-evidence-types"]
 
         for evidence_type in operation["x-evidence-types"]:

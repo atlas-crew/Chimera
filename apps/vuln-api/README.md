@@ -51,6 +51,16 @@ just test-quick
 just test-coverage
 ```
 
+### OpenAPI Checks
+```bash
+# Check live-route drift against docs/openapi.yaml
+just docs-check
+
+# Validate FedRAMP OpenAPI annotations for Crucible scenario consumers
+just docs-check-fedramp
+uv run python scripts/check_fedramp_openapi_annotations.py --json
+```
+
 ### Database Mode (Opt-In)
 
 **NEW:** Enable real SQL injection vulnerabilities with SQLite backend.

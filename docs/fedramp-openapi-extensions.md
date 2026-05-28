@@ -201,6 +201,19 @@ results.
 
 ## Drift Rules
 
+Run the annotation validator before updating Crucible scenarios that reference
+Chimera FedRAMP operations:
+
+```bash
+cd apps/vuln-api
+just docs-check-fedramp
+uv run python scripts/check_fedramp_openapi_annotations.py --json
+```
+
+The text output is intended for local and CI logs. The `--json` output is stable
+for Crucible compatibility-matrix automation and includes `annotated_count`,
+`annotated_operations`, and `errors`.
+
 FedRAMP annotation validation should fail when:
 
 - a FedRAMP-relevant operation lacks any required extension;

@@ -105,6 +105,10 @@ format:
 docs-check:
     {{uv}} run python scripts/check_openapi_drift.py
 
+# Validate FedRAMP OpenAPI operation annotations (non-zero on invalid annotations)
+docs-check-fedramp:
+    {{uv}} run python scripts/check_fedramp_openapi_annotations.py
+
 # Prune stale (path, method) pairs from docs/openapi.yaml
 docs-prune:
     {{uv}} run python scripts/prune_openapi_drift.py
