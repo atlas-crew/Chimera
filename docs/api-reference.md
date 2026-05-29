@@ -18,6 +18,14 @@ The static `/openapi.yaml` spec includes machine-readable FedRAMP extensions on 
 
 Annotated domains: auth, users, SaaS tenants, admin/audit, healthcare, banking, ecommerce, payments, compliance-oriented configuration, and integrations.
 
+See [FedRAMP OpenAPI Extensions](fedramp-openapi-extensions.md) for the full producer contract, fixture IDs, and drift checks.
+
+## HIPAA Evidence Slice
+
+The HIPAA evidence slice is route-compatible for Crucible's initial technical evidence pack, but it is not a HIPAA compliance claim. Consumers should treat these routes as intentionally vulnerable healthcare evidence producers and keep final control interpretation in their own assessment layer.
+
+See [HIPAA Evidence Endpoints](hipaa-evidence-endpoints.md) for the current route behavior, deterministic fixture gaps, and validation commands.
+
 ---
 
 ## System
@@ -78,6 +86,8 @@ HIPAA records, PHI/PII exposure, medical claims, and provider operations.
 | GET | `/api/v1/healthcare/records/<id>` | Get medical record (PHI exposure) |
 | POST | `/api/v1/healthcare/records` | Create medical record |
 | PUT | `/api/v1/healthcare/records/<id>` | Update medical record |
+| POST | `/api/v1/healthcare/records/emergency-access` | Emergency break-glass PHI access |
+| POST | `/api/v1/healthcare/records/export` | Patient-record export evidence route |
 | GET | `/api/hipaa/records/patient` | Patient lookup (IDOR) |
 | POST | `/api/hipaa/records/bulk-export` | Bulk PHI export |
 | POST | `/api/v1/healthcare/claims/submit` | Submit insurance claim |
@@ -214,6 +224,7 @@ Red team simulation endpoints for various attack vectors.
 
 | Method | Path | Description |
 |--------|------|-------------|
+| POST | `/api/v1/admin/audit/suspend` | Audit-suppression evidence route; supports strict comparison mode |
 | POST | `/api/v1/admin/system/execute` | Command injection |
 | POST | `/api/v1/admin/files/read` | Path traversal |
 | POST | `/api/integrations/webhook/register` | SSRF via webhook |

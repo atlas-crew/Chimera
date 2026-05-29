@@ -170,6 +170,9 @@ GET    /api/hipaa/directory                     # Healthcare system discovery
 GET    /api/providers/network/search            # Provider network enumeration  
 GET    /api/medical/phi/endpoints               # PHI access points
 POST   /api/providers/auth/login                # Provider authentication
+POST   /api/v1/healthcare/records/emergency-access # Emergency break-glass PHI access
+POST   /api/v1/healthcare/records/export        # Patient-record export evidence
+GET    /api/v1/healthcare/records/{record_id}   # Patient record access evidence
 GET    /api/hipaa/records/patient               # Medical records access
 POST   /api/insurance/portability/transfer      # Insurance portability manipulation
 PUT    /api/providers/network/billing           # Provider billing abuse
@@ -180,6 +183,7 @@ GET    /api/medical/mental-health/sessions      # Mental health records
 POST   /api/hipaa/transfer/encrypted            # Data exfiltration
 POST   /api/hipaa/system/configuration          # System backdoor
 PUT    /api/hipaa/audit-logs                    # Audit log manipulation
+POST   /api/v1/admin/audit/suspend              # Audit suppression evidence
 ```
 
 ---
